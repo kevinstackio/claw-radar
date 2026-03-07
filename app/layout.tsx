@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { Github } from "lucide-react";
+import { HeaderIpSearch } from "@/components/header-ip-search";
+import { AppToaster } from "@/components/app-toaster";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -35,8 +37,8 @@ export default function RootLayout({
             WebkitBackdropFilter: "blur(16px) saturate(140%)",
           }}
         >
-          <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
-            <Link href="/" className="flex items-center gap-3">
+          <div className="flex h-16 w-full items-center gap-3 px-5">
+            <Link href="/" className="flex shrink-0 items-center gap-3">
               <Image
                 src="/claw-radar-icon.svg"
                 alt="ClawRadar logo"
@@ -45,14 +47,15 @@ export default function RootLayout({
                 className="size-10 rounded-full border border-border bg-card"
                 priority
               />
-              <span className="text-lg font-semibold tracking-tight">ClawRadar</span>
+              <span className="hidden text-lg font-semibold tracking-tight sm:inline">ClawRadar</span>
             </Link>
+            <HeaderIpSearch />
             <a
               href="https://github.com/kevinstackio/claw-radar"
               target="_blank"
               rel="noreferrer"
               aria-label="GitHub Profile"
-              className="inline-flex size-10 items-center justify-center text-foreground/80 transition-colors hover:text-foreground"
+              className="inline-flex size-10 shrink-0 items-center justify-center text-foreground/80 transition-colors hover:text-foreground"
             >
               <Github className="size-6" strokeWidth={2.2} />
             </a>
@@ -61,6 +64,7 @@ export default function RootLayout({
         <main className="mt-[calc(4rem+20px)] h-[calc(100dvh-4rem-40px)] w-full px-5 pb-5">
           {children}
         </main>
+        <AppToaster />
       </body>
     </html>
   );
