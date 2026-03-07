@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { Github } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -28,32 +27,37 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body className="min-h-screen bg-background text-foreground">
-        <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
+        <header
+          className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-white/30 shadow-[0_6px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-black/25"
+          style={{
+            backdropFilter: "blur(16px) saturate(140%)",
+            WebkitBackdropFilter: "blur(16px) saturate(140%)",
+          }}
+        >
           <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
             <Link href="/" className="flex items-center gap-3">
               <Image
                 src="/claw-radar-icon.svg"
                 alt="ClawRadar logo"
-                width={36}
-                height={36}
-                className="size-9 rounded-full border border-border bg-card"
+                width={42}
+                height={42}
+                className="size-10 rounded-full border border-border bg-card"
                 priority
               />
               <span className="text-lg font-semibold tracking-tight">ClawRadar</span>
             </Link>
-            <Button asChild variant="ghost" size="icon" className="rounded-full">
-              <a
-                href="https://github.com/kevinstackio/claw-radar"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="GitHub Profile"
-              >
-                <Github data-icon="inline-start" />
-              </a>
-            </Button>
+            <a
+              href="https://github.com/kevinstackio/claw-radar"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="GitHub Profile"
+              className="inline-flex size-10 items-center justify-center text-foreground/80 transition-colors hover:text-foreground"
+            >
+              <Github className="size-6" strokeWidth={2.2} />
+            </a>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">{children}</main>
+        <main className="mx-auto w-full max-w-6xl px-4 pb-8 pt-24 sm:px-6">{children}</main>
       </body>
     </html>
   );
