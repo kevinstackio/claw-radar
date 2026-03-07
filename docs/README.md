@@ -7,6 +7,7 @@
 - [`PROJECT.md`](PROJECT.md)：项目描述、技术栈、目录分工与开发命令。
 - [`MCP.md`](MCP.md)：shadcn MCP 接入说明（客户端配置与项目约定）。
 - [`SKILLS.md`](SKILLS.md)：shadcn Skills 接入说明（以及与 Codex 的关系）。
+- [`ECHARTS.md`](ECHARTS.md)：ECharts 接入状态，以及 ECharts MCP/Skills 核查结果。
 - [`CODEX-RULES.md`](CODEX-RULES.md)：本项目给 Codex 使用的特定规约。
 
 ## 使用方式

@@ -1,10 +1,11 @@
+import { EchartsExposureChart } from "@/components/echarts-exposure-chart";
+
 export default function Home() {
   return (
-    <section className="rounded-2xl border bg-card p-8 shadow-sm">
-      <h1 className="text-2xl font-semibold tracking-tight">ClawRadar</h1>
-      <p className="mt-2 text-muted-foreground">
-        Visualizing publicly exposed OpenClaw instances worldwide.
-      </p>
+    <section className="h-full min-h-0">
+      <div className="h-full min-h-0 overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <EchartsExposureChart />
+      </div>
     </section>
   );
 }
