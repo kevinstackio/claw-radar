@@ -22,6 +22,8 @@
 - `app/`：App Router 页面、布局、全局样式
 - `components/`：可复用组件（包含 `components/ui`）
 - `lib/`：公共工具函数
+- `scripts/`：本地执行脚本（例如 Netlas 数据抓取）
+- `data/backups/`：本地备份数据（默认 git 忽略）
 
 ## 本地开发
 
@@ -36,3 +38,4 @@ pnpm dev
 - `pnpm build`：构建生产包
 - `pnpm start`：启动生产服务
 - `pnpm lint`：执行代码检查
+- `pnpm netlas:fetch`：调用 Netlas API 并写入本地备份（Free 自动化推荐）

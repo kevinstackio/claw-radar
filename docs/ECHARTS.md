@@ -4,9 +4,9 @@
 
 ## 项目内接入状态
 
-- 已安装依赖：`echarts`、`echarts-countries-js`（用于世界地图 GeoJSON）
-- 图表组件：`components/echarts-exposure-chart.tsx`
-- 页面接入：`app/page.tsx`
+- 已安装依赖：`echarts`（保留，后续用于常规图表）
+- 地图方案：已切换到 `Leaflet`，ECharts 地图实现已移除
+- 当前页面：`app/page.tsx` 使用 `components/exposure-map-client.tsx`
 
 ## ECharts 是否有 MCP
 

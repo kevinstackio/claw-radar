@@ -1,0 +1,131 @@
+"use client";
+
+import { useMemo } from "react";
+import { CircleMarker, MapContainer, Popup, ScaleControl, TileLayer } from "react-leaflet";
+
+import type { ExposureSnapshot } from "@/lib/exposure-types";
+
+type ExposureMapClientProps = {
+  snapshot: ExposureSnapshot;
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function isValidCoordinate(lat: number, lon: number) {
+  return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
+export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
+  const plottedPoints = useMemo(
+    () =>
+      snapshot.points
+        .map((point) => {
+          const [lon, lat, count] = point.value;
+          if (!isValidCoordinate(lat, lon)) {
+            return null;
+          }
+          return {
+            ...point,
+            lat,
+            lon,
+            count: Number.isFinite(count) ? count : 1,
+          };
+        })
+        .filter((point): point is NonNullable<typeof point> => point !== null),
+    [snapshot.points]
+  );
+
+  const maxCount = useMemo(
+    () => Math.max(1, ...plottedPoints.map((point) => point.count)),
+    [plottedPoints]
+  );
+
+  const generatedAtLabel = snapshot.generatedAt
+    ? new Date(snapshot.generatedAt).toLocaleString()
+    : "No backup yet";
+
+  return (
+    <div className="relative size-full overflow-hidden">
+      <MapContainer
+        center={[20, 0]}
+        zoom={2}
+        minZoom={2}
+        maxZoom={10}
+        worldCopyJump
+        className="size-full"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <ScaleControl position="bottomleft" />
+
+        {plottedPoints.map((point) => {
+          const radius = clamp(3 + Math.log2(Math.max(1, point.count)) * 1.8, 3, 12);
+          return (
+            <CircleMarker
+              key={`${point.ip}-${point.lat}-${point.lon}`}
+              center={[point.lat, point.lon]}
+              radius={radius}
+              pathOptions={{
+                color: "#7f1d1d",
+                weight: 1,
+                fillColor: "#ef4444",
+                fillOpacity: 0.82,
+              }}
+            >
+              <Popup>
+                <div className="space-y-1 text-xs">
+                  <div>
+                    <strong>IP:</strong> {point.ip}
+                  </div>
+                  <div>
+                    <strong>Country:</strong> {point.country}
+                  </div>
+                  <div>
+                    <strong>Records:</strong> {point.count}
+                  </div>
+                  <div>
+                    <strong>Ports:</strong> {point.portSummary || "N/A"}
+                  </div>
+                  <div>
+                    <strong>Coord:</strong> {point.lat.toFixed(4)}, {point.lon.toFixed(4)}
+                  </div>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+      </MapContainer>
+
+      <div className="pointer-events-none absolute left-3 top-3 rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
+        <p>Records: {snapshot.publicRecords}</p>
+        <p>Plotted Coordinates: {plottedPoints.length}</p>
+        <p>Countries: {snapshot.countries.length}</p>
+        <p>Generated: {generatedAtLabel}</p>
+      </div>
+
+      <div className="pointer-events-none absolute right-3 top-3 max-w-sm rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
+        <p>Recommended precision: city-level (about 1-20km).</p>
+        <p>Street-level is not reliable with IP geolocation data.</p>
+      </div>
+
+      {snapshot.note ? (
+        <div className="pointer-events-none absolute right-3 bottom-3 max-w-sm rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
+          {snapshot.note}
+        </div>
+      ) : null}
+
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
+        <p>
+          Query window tip: free data is partial; use trend over time, not one-time total.
+        </p>
+        <p>
+          Max marker weight: {maxCount}
+        </p>
+      </div>
+    </div>
+  );
+}
