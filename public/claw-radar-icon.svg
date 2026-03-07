@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Claw Radar Option 1 Classic</title>
+  <desc id="desc">Red lobster with classic radar rings and sweep sector.</desc>
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F5FBFF" />
+      <stop offset="100%" stop-color="#E8F4FF" />
+    </linearGradient>
+    <linearGradient id="sweep1" x1="256" y1="256" x2="468" y2="140">
+      <stop offset="0%" stop-color="#00CCFF" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#00CCFF" stop-opacity="0.42" />
+    </linearGradient>
+    <linearGradient id="lobster1" x1="215" y1="124" x2="304" y2="404">
+      <stop offset="0%" stop-color="#FF4E4A" />
+      <stop offset="100%" stop-color="#B80A19" />
+    </linearGradient>
+  </defs>
+
+  <circle cx="256" cy="256" r="240" fill="url(#bg1)" />
+  <path d="M256 256L470 138A250 250 0 0 1 460 384Z" fill="url(#sweep1)" />
+  <circle cx="256" cy="256" r="184" fill="none" stroke="#1785B8" stroke-width="12" opacity="0.4" />
+  <circle cx="256" cy="256" r="126" fill="none" stroke="#1785B8" stroke-width="10" opacity="0.56" />
+  <circle cx="256" cy="256" r="72" fill="none" stroke="#1785B8" stroke-width="8" opacity="0.74" />
+  <path d="M62 256H450M256 62V450" fill="none" stroke="#1785B8" stroke-width="5" opacity="0.34" />
+
+  <g fill="url(#lobster1)">
+    <path d="M121 188C96 180 86 156 96 136C108 113 138 109 154 127C168 143 166 170 146 184Z" />
+    <path d="M391 188C416 180 426 156 416 136C404 113 374 109 358 127C344 143 346 170 366 184Z" />
+    <ellipse cx="256" cy="252" rx="46" ry="76" />
+    <ellipse cx="256" cy="336" rx="41" ry="27" />
+    <ellipse cx="256" cy="366" rx="33" ry="20" />
+    <path d="M232 390Q256 412 280 390Q256 401 232 390Z" />
+  </g>
+
+  <path d="M210 240C182 230 156 214 133 192M302 240C330 230 356 214 379 192" fill="none" stroke="url(#lobster1)" stroke-width="18" stroke-linecap="round" />
+  <path d="M250 184C235 154 221 119 210 84M262 184C277 154 291 119 302 84" fill="none" stroke="#FF6A64" stroke-width="7" stroke-linecap="round" />
+  <path d="M110 151C122 157 134 161 146 160M402 151C390 157 378 161 366 160" fill="none" stroke="#FFD8D3" stroke-width="4" stroke-linecap="round" />
+  <path d="M218 270L196 286M218 292L192 306M294 270L316 286M294 292L320 306" fill="none" stroke="#FF837C" stroke-width="7" stroke-linecap="round" />
+  <circle cx="243" cy="222" r="5" fill="#48080E" />
+  <circle cx="269" cy="222" r="5" fill="#48080E" />
+  <circle cx="256" cy="256" r="228" fill="none" stroke="#0C4E72" stroke-width="4" />
+</svg>
