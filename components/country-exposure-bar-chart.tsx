@@ -7,35 +7,25 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, XAxis, YAxis
 import { Button } from "@/components/ui/button";
 import { ChartContainer, type ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { CountryExposure, ExposureSnapshot } from "@/lib/exposure-types";
+import type { ExposureSnapshot } from "@/lib/exposure-types";
 
 type CountryExposureBarChartProps = {
   snapshot: ExposureSnapshot;
 };
 
 type ChartMode = "pie" | "bar";
+type PieChartDatum = {
+  name: string;
+  value: number;
+  color: string;
+};
 
-// Temporary preview dataset used only when real data is not available yet.
-const PREVIEW_COUNTRIES: CountryExposure[] = [
-  { name: "United States", value: 428 },
-  { name: "Germany", value: 266 },
-  { name: "Singapore", value: 211 },
-  { name: "Netherlands", value: 187 },
-  { name: "France", value: 168 },
-  { name: "United Kingdom", value: 151 },
-  { name: "Japan", value: 134 },
-  { name: "Canada", value: 112 },
-  { name: "India", value: 96 },
-  { name: "Brazil", value: 84 },
-  { name: "Australia", value: 63 },
-  { name: "South Korea", value: 58 },
-  { name: "Spain", value: 49 },
-  { name: "Italy", value: 42 },
-  { name: "Poland", value: 31 },
-  { name: "Turkey", value: 27 },
-  { name: "Mexico", value: 23 },
-  { name: "Sweden", value: 19 },
-];
+type PieTooltipPayloadItem = {
+  name?: string;
+  value?: number | string;
+  color?: string;
+  payload?: Partial<PieChartDatum>;
+};
 
 const barChartConfig = {
   records: {
@@ -50,11 +40,11 @@ const pieChartConfig = {
     color: "var(--chart-1)",
   },
   c1: { label: "Slice 1", color: "var(--chart-1)" },
-  c2: { label: "Slice 2", color: "var(--chart-2)" },
-  c3: { label: "Slice 3", color: "var(--chart-3)" },
-  c4: { label: "Slice 4", color: "var(--chart-4)" },
-  c5: { label: "Slice 5", color: "var(--chart-5)" },
-  c6: { label: "Others", color: "var(--muted-foreground)" },
+  c2: { label: "Slice 2", color: "oklch(0.86 0.09 251.813)" },
+  c3: { label: "Slice 3", color: "oklch(0.90 0.075 251.813)" },
+  c4: { label: "Slice 4", color: "oklch(0.94 0.055 251.813)" },
+  c5: { label: "Slice 5", color: "oklch(0.97 0.03 251.813)" },
+  c6: { label: "Others", color: "#e2e8f0" },
 } satisfies ChartConfig;
 
 const PIE_COLORS = [
@@ -66,29 +56,76 @@ const PIE_COLORS = [
   "var(--color-c6)",
 ];
 
+function PieCountryTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: PieTooltipPayloadItem[];
+}) {
+  const item = payload?.[0];
+  const country = (() => {
+    if (typeof item?.payload?.name === "string" && item.payload.name.trim().length > 0) {
+      return item.payload.name;
+    }
+    if (typeof item?.name === "string" && item.name.trim().length > 0) {
+      return item.name;
+    }
+    return "Unknown";
+  })();
+  const count =
+    typeof item?.payload?.value === "number"
+      ? item.payload.value.toLocaleString()
+      : typeof item?.value === "number"
+      ? item.value.toLocaleString()
+      : typeof item?.value === "string" && item.value.trim().length > 0
+        ? item.value
+        : "-";
+  const markerColor = item?.payload?.color ?? item?.color ?? "var(--muted-foreground)";
+
+  if (!active || !item) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-border/80 bg-background px-2.5 py-1.5 text-xs shadow-sm">
+      <p className="mb-1 text-[11px] text-muted-foreground">{country}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: markerColor }} />
+          <span className="text-muted-foreground">Records</span>
+        </div>
+        <span className="font-medium text-foreground">{count}</span>
+      </div>
+    </div>
+  );
+}
+
 export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartProps) {
   const [mode, setMode] = useState<ChartMode>("pie");
 
-  const hasRealData = useMemo(
-    () => snapshot.countries.some((item) => Number.isFinite(item.value) && item.value > 0),
-    [snapshot.countries]
-  );
-
   const countries = useMemo(() => {
-    const source = hasRealData ? snapshot.countries : PREVIEW_COUNTRIES;
-    return source
+    return snapshot.countries
       .filter((item) => Number.isFinite(item.value) && item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [hasRealData, snapshot.countries]);
+  }, [snapshot.countries]);
 
   const hasData = countries.length > 0;
 
-  const pieData = useMemo(() => {
-    const topFive = countries.slice(0, 5).map((item) => ({ name: item.name, value: item.value }));
+  const pieData = useMemo<PieChartDatum[]>(() => {
+    const topFive = countries.slice(0, 5).map((item, index) => ({
+      name: item.name,
+      value: item.value,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+    }));
     const othersValue = countries.slice(5).reduce((acc, item) => acc + item.value, 0);
 
     if (othersValue > 0) {
-      topFive.push({ name: "Others", value: othersValue });
+      topFive.push({
+        name: "Others",
+        value: othersValue,
+        color: PIE_COLORS[topFive.length % PIE_COLORS.length],
+      });
     }
 
     return topFive;
@@ -99,8 +136,8 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
     [countries]
   );
 
-  const title = mode === "pie" ? "Country Exposure Share" : "Country Exposure Count";
-  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Bars by country on Y-axis";
+  const title = mode === "pie" ? "Exposure Share" : "Exposure Count";
+  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Ranking of all countries";
 
   return (
     <div className="relative size-full">
@@ -150,19 +187,21 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               wrapperStyle={{ fontSize: "11px", color: "var(--color-muted-foreground)", paddingTop: 2 }}
               formatter={(value) => <span className="text-[11px] text-muted-foreground">{value}</span>}
             />
-            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+            <ChartTooltip cursor={false} content={<PieCountryTooltip />} />
             <Pie
               data={pieData}
               dataKey="value"
               nameKey="name"
+              startAngle={90}
+              endAngle={-270}
               cx="50%"
               cy="57%"
               outerRadius="62%"
               innerRadius={0}
               isAnimationActive
             >
-              {pieData.map((entry, index) => (
-                <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+              {pieData.map((entry) => (
+                <Cell key={entry.name} fill={entry.color} />
               ))}
             </Pie>
           </PieChart>
@@ -195,5 +234,3 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
     </div>
   );
 }
-
-

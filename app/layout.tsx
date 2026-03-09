@@ -10,6 +10,7 @@ import { HeaderIpSearch } from "@/components/header-ip-search";
 import { AppToaster } from "@/components/app-toaster";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const COPYRIGHT_START_YEAR = 2026;
 
 export const metadata: Metadata = {
   title: "ClawRadar",
@@ -27,6 +28,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currentYear = new Date().getFullYear();
+  const copyrightYearLabel =
+    currentYear > COPYRIGHT_START_YEAR
+      ? `${COPYRIGHT_START_YEAR}-${currentYear}`
+      : `${COPYRIGHT_START_YEAR}`;
+
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body className="flex h-dvh flex-col overflow-hidden bg-[#f2f4f7] text-foreground pb-2 dark:bg-[#0f1115]">
@@ -65,7 +72,18 @@ export default function RootLayout({
         <main className="min-h-0 flex-1 w-full overflow-hidden bg-[#f2f4f7] px-5 pt-5 dark:bg-[#0f1115]">{children}</main>
 
         <footer className="shrink-0 bg-gradient-to-t from-[#e8edf3] to-[#eef2f7] dark:from-[#11141b] dark:to-[#151a22]">
-          <div className="flex h-10 items-center justify-center px-5 text-sm font-medium text-muted-foreground">Powered by ClawRadar</div>
+          <div className="flex h-10 items-center justify-center px-5 text-sm font-medium text-muted-foreground">
+            <span>{`Copyright © ${copyrightYearLabel} Kevin Lin`}</span>
+            <span className="mx-1.5">·</span>
+            <a
+              href="https://kevinstack.dev"
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-2 transition-colors hover:text-foreground hover:underline"
+            >
+              kevinstack.dev
+            </a>
+          </div>
         </footer>
 
         <AppToaster />
@@ -73,4 +91,3 @@ export default function RootLayout({
     </html>
   );
 }
-

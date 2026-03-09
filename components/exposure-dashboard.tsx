@@ -2,6 +2,7 @@
 
 import { CountryExposureBarChart } from "@/components/country-exposure-bar-chart";
 import { ExposureMap } from "@/components/exposure-map";
+import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -9,14 +10,14 @@ import {
 } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ExposureSnapshot } from "@/lib/exposure-types";
-import { formatSnapshotTimestamp } from "@/lib/datetime";
+import { formatSnapshotDate } from "@/lib/datetime";
 
 type ExposureDashboardProps = {
   snapshot: ExposureSnapshot;
 };
 
 export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
-  const generatedAtLabel = formatSnapshotTimestamp(snapshot.generatedAt);
+  const generatedAtLabel = formatSnapshotDate(snapshot.generatedAt);
 
   return (
     <section className="h-full min-h-0">
@@ -52,12 +53,18 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                     </TabsContent>
 
                     <TabsContent value="source" className="mt-3 overflow-auto">
-                      <div className="space-y-2 text-sm font-medium leading-relaxed text-foreground">
+                      <div className="space-y-3 text-sm font-medium leading-relaxed text-foreground">
                         <p>
-                          Current data is aggregated from public indexing sources, including Netlas and
-                          OpenClaw-related queries.
+                          This dashboard uses data from Netlas, a platform to discover, scan, and
+                          monitor online assets.
                         </p>
-                        <p>Always follow responsible disclosure practices and protect your own systems.</p>
+                        <div className="flex justify-end">
+                          <Button asChild variant="outline" size="sm" className="bg-white text-slate-900 border-slate-200 hover:bg-slate-100">
+                            <a href="https://netlas.io/" target="_blank" rel="noreferrer">
+                              <span>visit netlas</span>
+                            </a>
+                          </Button>
+                        </div>
                       </div>
                     </TabsContent>
                   </Tabs>
@@ -86,8 +93,3 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
     </section>
   );
 }
-
-
-
-
-

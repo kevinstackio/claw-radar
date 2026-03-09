@@ -169,9 +169,9 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
               center={[point.lat, point.lon]}
               radius={radius}
               pathOptions={{
-                color: isSelected ? "#0c4a6e" : "#7f1d1d",
+                color: isSelected ? "#0c4a6e" : "#a16207",
                 weight: isSelected ? 2 : 1,
-                fillColor: isSelected ? "#38bdf8" : "#ef4444",
+                fillColor: isSelected ? "#38bdf8" : "#f59e0b",
                 fillOpacity: isSelected ? 0.95 : 0.82,
               }}
             >
@@ -204,4 +204,3 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     </div>
   );
 }
-
