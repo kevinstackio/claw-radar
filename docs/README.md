@@ -17,3 +17,7 @@
 - 需要免费自动化采集时，按 `FREE-AUTOMATION.md` 执行。
 - 需要 AI 能力时，按 `MCP.md` 和 `SKILLS.md` 完成配置。
 - 协作开发时，按 `CODEX-RULES.md` 执行。
+
+## 包管理器约定
+
+- 本项目仅允许使用 pnpm，请勿使用 npm 或 yarn。

@@ -42,6 +42,8 @@
 
 ## 本地开发
 
+> 包管理器约定：本项目仅允许使用 pnpm，请勿使用 npm 或 yarn。
+
 ```bash
 pnpm install
 pnpm dev
