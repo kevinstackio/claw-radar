@@ -29,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      <body className="flex h-dvh flex-col overflow-hidden bg-background text-foreground pb-2">
         <header
           className="shrink-0 border-b border-black/10 bg-white/30 shadow-[0_6px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-black/25"
           style={{
@@ -62,12 +62,10 @@ export default function RootLayout({
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 w-full overflow-hidden px-5 py-5">{children}</main>
+        <main className="min-h-0 flex-1 w-full overflow-hidden px-5 pt-5">{children}</main>
 
-        <footer className="shrink-0 border-t border-black/10 bg-white/60 dark:border-white/10 dark:bg-black/35">
-          <div className="flex h-9 items-center justify-center px-5 text-xs text-muted-foreground">
-            power by ClawRadar
-          </div>
+        <footer className="shrink-0 bg-white/60 dark:bg-black/35">
+          <div className="flex h-10 items-center justify-center px-5 text-sm font-medium text-muted-foreground">Powered by ClawRadar</div>
         </footer>
 
         <AppToaster />
@@ -75,3 +73,4 @@ export default function RootLayout({
     </html>
   );
 }
+
