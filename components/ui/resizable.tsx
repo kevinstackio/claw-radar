@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { GripVertical } from "lucide-react";
+import { GripHorizontal, GripVertical } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
 
 import { cn } from "@/lib/utils";
@@ -20,15 +20,19 @@ function ResizablePanelGroup({
 
 const ResizablePanel = ResizablePrimitive.Panel;
 
+type ResizableHandleProps = React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle> & {
+  withHandle?: boolean;
+  handleClassName?: string;
+  handleIcon?: "vertical" | "horizontal";
+};
+
 function ResizableHandle({
   withHandle,
   className,
   handleClassName,
+  handleIcon = "vertical",
   ...props
-}: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle> & {
-  withHandle?: boolean;
-  handleClassName?: string;
-}) {
+}: ResizableHandleProps) {
   return (
     <ResizablePrimitive.PanelResizeHandle
       className={cn(
@@ -50,7 +54,11 @@ function ResizableHandle({
             handleClassName
           )}
         >
-          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/80 transition-colors group-hover:text-sky-600/90" />
+          {handleIcon === "horizontal" ? (
+            <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground/80 transition-colors group-hover:text-sky-600/90" />
+          ) : (
+            <GripVertical className="h-3.5 w-3.5 text-muted-foreground/80 transition-colors group-hover:text-sky-600/90" />
+          )}
         </div>
       ) : null}
     </ResizablePrimitive.PanelResizeHandle>

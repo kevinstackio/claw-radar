@@ -9,15 +9,14 @@ import {
 } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ExposureSnapshot } from "@/lib/exposure-types";
+import { formatSnapshotTimestamp } from "@/lib/datetime";
 
 type ExposureDashboardProps = {
   snapshot: ExposureSnapshot;
 };
 
 export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
-  const generatedAtLabel = snapshot.generatedAt
-    ? new Date(snapshot.generatedAt).toLocaleString()
-    : "No backup yet";
+  const generatedAtLabel = formatSnapshotTimestamp(snapshot.generatedAt);
 
   return (
     <section className="h-full min-h-0">
@@ -65,7 +64,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                 </div>
               </ResizablePanel>
 
-              <ResizableHandle withHandle />
+              <ResizableHandle withHandle handleIcon="horizontal" handleClassName="h-4 w-8 rounded-[5px]" />
 
               <ResizablePanel defaultSize={62} minSize={35} className="min-h-0">
                 <div className="h-full min-h-0 overflow-hidden bg-card/70">
@@ -75,7 +74,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
             </ResizablePanelGroup>
           </ResizablePanel>
 
-          <ResizableHandle withHandle className="z-[1400] w-px after:w-10" />
+          <ResizableHandle withHandle className="z-[1400] w-px after:w-10" handleIcon="vertical" handleClassName="h-8 w-4 rounded-[5px]" />
 
           <ResizablePanel defaultSize={76} minSize={52} className="min-w-0">
             <div className="h-full min-h-0 overflow-hidden bg-card/70">
@@ -87,4 +86,8 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
     </section>
   );
 }
+
+
+
+
 

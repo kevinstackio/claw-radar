@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 
 import type { ExposureSnapshot } from "@/lib/exposure-types";
+import { formatSnapshotTimestamp } from "@/lib/datetime";
 import {
   IP_SEARCH_EVENT,
   type IpSearchResult,
@@ -94,9 +95,7 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     ? `${matchedPoint.ip}-${matchedPoint.lat}-${matchedPoint.lon}`
     : null;
 
-  const generatedAtLabel = snapshot.generatedAt
-    ? new Date(snapshot.generatedAt).toLocaleString()
-    : "No backup yet";
+  const generatedAtLabel = formatSnapshotTimestamp(snapshot.generatedAt);
 
   useEffect(() => {
     if (!matchedPointKey) {
@@ -205,3 +204,4 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     </div>
   );
 }
+

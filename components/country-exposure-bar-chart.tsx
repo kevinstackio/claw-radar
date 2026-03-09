@@ -1,126 +1,190 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import * as echarts from "echarts/core";
-import type { EChartsOption } from "echarts";
-import { BarChart } from "echarts/charts";
-import { DataZoomComponent, GridComponent, TooltipComponent } from "echarts/components";
-import { CanvasRenderer } from "echarts/renderers";
+import { useMemo, useState } from "react";
+import { BarChart3, PieChart as PieChartIcon } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 
-import type { ExposureSnapshot } from "@/lib/exposure-types";
+import { Button } from "@/components/ui/button";
+import { ChartContainer, type ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
-
-echarts.use([BarChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer]);
+import type { CountryExposure, ExposureSnapshot } from "@/lib/exposure-types";
 
 type CountryExposureBarChartProps = {
   snapshot: ExposureSnapshot;
 };
 
-export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartProps) {
-  const chartRef = useRef<HTMLDivElement>(null);
+type ChartMode = "pie" | "bar";
 
-  const hasData = useMemo(
+// Temporary preview dataset used only when real data is not available yet.
+const PREVIEW_COUNTRIES: CountryExposure[] = [
+  { name: "United States", value: 428 },
+  { name: "Germany", value: 266 },
+  { name: "Singapore", value: 211 },
+  { name: "Netherlands", value: 187 },
+  { name: "France", value: 168 },
+  { name: "United Kingdom", value: 151 },
+  { name: "Japan", value: 134 },
+  { name: "Canada", value: 112 },
+  { name: "India", value: 96 },
+  { name: "Brazil", value: 84 },
+  { name: "Australia", value: 63 },
+  { name: "South Korea", value: 58 },
+  { name: "Spain", value: 49 },
+  { name: "Italy", value: 42 },
+  { name: "Poland", value: 31 },
+  { name: "Turkey", value: 27 },
+  { name: "Mexico", value: 23 },
+  { name: "Sweden", value: 19 },
+];
+
+const barChartConfig = {
+  records: {
+    label: "Records",
+    color: "var(--chart-1)",
+  },
+} satisfies ChartConfig;
+
+const pieChartConfig = {
+  value: {
+    label: "Records",
+    color: "var(--chart-1)",
+  },
+  c1: { label: "Slice 1", color: "var(--chart-1)" },
+  c2: { label: "Slice 2", color: "var(--chart-2)" },
+  c3: { label: "Slice 3", color: "var(--chart-3)" },
+  c4: { label: "Slice 4", color: "var(--chart-4)" },
+  c5: { label: "Slice 5", color: "var(--chart-5)" },
+  c6: { label: "Others", color: "var(--muted-foreground)" },
+} satisfies ChartConfig;
+
+const PIE_COLORS = [
+  "var(--color-c1)",
+  "var(--color-c2)",
+  "var(--color-c3)",
+  "var(--color-c4)",
+  "var(--color-c5)",
+  "var(--color-c6)",
+];
+
+export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartProps) {
+  const [mode, setMode] = useState<ChartMode>("pie");
+
+  const hasRealData = useMemo(
     () => snapshot.countries.some((item) => Number.isFinite(item.value) && item.value > 0),
     [snapshot.countries]
   );
 
-  const option = useMemo<EChartsOption>(() => {
-    const sorted = [...snapshot.countries].sort((a, b) => b.value - a.value);
-    const countries = sorted.map((item) => item.name);
-    const values = sorted.map((item) => item.value);
-    const visibleCount = 18;
-    const hasItems = countries.length > 0;
-    const endValue = hasItems ? Math.min(visibleCount - 1, countries.length - 1) : 0;
+  const countries = useMemo(() => {
+    const source = hasRealData ? snapshot.countries : PREVIEW_COUNTRIES;
+    return source
+      .filter((item) => Number.isFinite(item.value) && item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [hasRealData, snapshot.countries]);
 
-    return {
-      animationDuration: 450,
-      tooltip: {
-        trigger: "axis",
-        axisPointer: { type: "shadow" },
-      },
-      grid: {
-        top: 16,
-        left: 56,
-        right: 16,
-        bottom: 16,
-        containLabel: true,
-      },
-      xAxis: {
-        type: "value",
-        axisLabel: {
-          fontSize: 10,
-        },
-        axisTick: { show: false },
-        splitLine: { lineStyle: { color: "#e2e8f0" } },
-      },
-      yAxis: {
-        type: "category",
-        data: countries,
-        inverse: true,
-        axisLabel: {
-          interval: 0,
-          fontSize: 10,
-        },
-        axisTick: { show: false },
-      },
-      dataZoom: [
-        {
-          type: "inside",
-          yAxisIndex: 0,
-          startValue: 0,
-          endValue,
-          zoomOnMouseWheel: false,
-        },
-      ],
-      series: [
-        {
-          type: "bar",
-          data: values,
-          barMaxWidth: 14,
-          itemStyle: {
-            color: "#2563eb",
-            borderRadius: [0, 4, 4, 0],
-          },
-          emphasis: {
-            itemStyle: {
-              color: "#1d4ed8",
-            },
-          },
-        },
-      ],
-    };
-  }, [snapshot.countries]);
+  const hasData = countries.length > 0;
 
-  useEffect(() => {
-    if (!hasData || !chartRef.current) return;
+  const pieData = useMemo(() => {
+    const topFive = countries.slice(0, 5).map((item) => ({ name: item.name, value: item.value }));
+    const othersValue = countries.slice(5).reduce((acc, item) => acc + item.value, 0);
 
-    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
-    chart.setOption(option);
-
-    const resize = () => chart.resize();
-    window.addEventListener("resize", resize);
-
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(resize);
-      observer.observe(chartRef.current);
+    if (othersValue > 0) {
+      topFive.push({ name: "Others", value: othersValue });
     }
 
-    return () => {
-      window.removeEventListener("resize", resize);
-      observer?.disconnect();
-      chart.dispose();
-    };
-  }, [hasData, option]);
+    return topFive;
+  }, [countries]);
 
-  if (!hasData) {
-    return (
-      <EmptyState
-        title="No chart data"
-        description="Country exposure data has not been generated yet."
-      />
-    );
-  }
+  const barData = useMemo(
+    () => countries.map((item) => ({ country: item.name, records: item.value })),
+    [countries]
+  );
 
-  return <div ref={chartRef} className="size-full" aria-label="Country exposure bar chart" />;
+  const title = mode === "pie" ? "Country Exposure Share" : "Country Exposure Count";
+  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Bars by country on Y-axis";
+
+  return (
+    <div className="relative size-full">
+      <div className="absolute left-3 top-3 z-20">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+      </div>
+
+      <div className="absolute right-3 top-3 z-20 inline-flex h-9 items-center gap-1 rounded-md border border-border/80 bg-background/95 p-1 text-muted-foreground shadow-sm">
+        <Button
+          type="button"
+          size="icon-xs"
+          className="h-7 w-7 rounded-sm"
+          variant={mode === "pie" ? "secondary" : "ghost"}
+          onClick={() => setMode("pie")}
+          title="Pie chart"
+          aria-label="Switch to pie chart"
+        >
+          <PieChartIcon className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="icon-xs"
+          className="h-7 w-7 rounded-sm"
+          variant={mode === "bar" ? "secondary" : "ghost"}
+          onClick={() => setMode("bar")}
+          title="Bar chart"
+          aria-label="Switch to bar chart"
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {!hasData ? (
+        <EmptyState
+          title="No chart data"
+          description="Country exposure data has not been generated yet."
+        />
+      ) : mode === "pie" ? (
+        <ChartContainer config={pieChartConfig} className="h-full w-full pt-10">
+          <PieChart>
+            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+            <Pie
+              data={pieData}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="57%"
+              outerRadius="62%"
+              innerRadius={0}
+              isAnimationActive
+            >
+              {pieData.map((entry, index) => (
+                <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+      ) : (
+        <ChartContainer config={barChartConfig} className="h-full w-full pt-10">
+          <BarChart layout="vertical" data={barData} margin={{ top: 16, right: 16, left: 8, bottom: 16 }}>
+            <CartesianGrid horizontal={false} />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tick={{ fontSize: 10 }}
+            />
+            <YAxis
+              dataKey="country"
+              type="category"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              width={92}
+              tick={{ fontSize: 10 }}
+            />
+            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+            <Bar dataKey="records" fill="var(--color-records)" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ChartContainer>
+      )}
+    </div>
+  );
 }
+
