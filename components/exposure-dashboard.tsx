@@ -77,7 +77,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
             </ResizablePanelGroup>
           </ResizablePanel>
 
-          <ResizableHandle withHandle className="z-[1400] w-px after:w-10" handleClassName="h-9 w-7 border-2" />
+          <ResizableHandle withHandle className="z-[1400] w-px after:w-10" />
 
           <ResizablePanel defaultSize={76} minSize={52} className="min-w-0">
             <div className="h-full min-h-0 overflow-hidden bg-card/70">
@@ -89,9 +89,3 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
     </section>
   );
 }
-
-
-
-
-
-

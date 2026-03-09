@@ -2,7 +2,7 @@
 
 import type { CircleMarker as LeafletCircleMarker } from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleMarker, MapContainer, Popup, ScaleControl, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 
 import type { ExposureSnapshot } from "@/lib/exposure-types";
 import {
@@ -94,11 +94,6 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     ? `${matchedPoint.ip}-${matchedPoint.lat}-${matchedPoint.lon}`
     : null;
 
-  const maxCount = useMemo(
-    () => Math.max(1, ...plottedPoints.map((point) => point.count)),
-    [plottedPoints]
-  );
-
   const generatedAtLabel = snapshot.generatedAt
     ? new Date(snapshot.generatedAt).toLocaleString()
     : "No backup yet";
@@ -138,6 +133,8 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
   return (
     <div className="relative size-full overflow-hidden">
       <MapContainer
+        zoomControl={false}
+        attributionControl={false}
         center={[20, 0]}
         zoom={2}
         minZoom={2}
@@ -149,7 +146,6 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <ScaleControl position="bottomleft" />
         <MapSelectionController target={matchedPoint} />
 
         {plottedPoints.map((point) => {
@@ -206,29 +202,6 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
           );
         })}
       </MapContainer>
-
-      <div className="pointer-events-none absolute left-3 top-3 rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
-        <p>Records: {snapshot.publicRecords}</p>
-        <p>Plotted Coordinates: {plottedPoints.length}</p>
-        <p>Countries: {snapshot.countries.length}</p>
-        <p>Generated: {generatedAtLabel}</p>
-      </div>
-
-      <div className="pointer-events-none absolute right-3 top-3 max-w-sm rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
-        <p>Recommended precision: city-level (about 1-20km).</p>
-        <p>Street-level is not reliable with IP geolocation data.</p>
-      </div>
-
-      {snapshot.note ? (
-        <div className="pointer-events-none absolute right-3 bottom-3 max-w-sm rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
-          {snapshot.note}
-        </div>
-      ) : null}
-
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm">
-        <p>Query window tip: free data is partial; use trend over time, not one-time total.</p>
-        <p>Max marker weight: {maxCount}</p>
-      </div>
     </div>
   );
 }

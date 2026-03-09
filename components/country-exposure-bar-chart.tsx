@@ -8,6 +8,7 @@ import { DataZoomComponent, GridComponent, TooltipComponent } from "echarts/comp
 import { CanvasRenderer } from "echarts/renderers";
 
 import type { ExposureSnapshot } from "@/lib/exposure-types";
+import { EmptyState } from "@/components/ui/empty-state";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer]);
 
@@ -18,13 +19,18 @@ type CountryExposureBarChartProps = {
 export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
+  const hasData = useMemo(
+    () => snapshot.countries.some((item) => Number.isFinite(item.value) && item.value > 0),
+    [snapshot.countries]
+  );
+
   const option = useMemo<EChartsOption>(() => {
     const sorted = [...snapshot.countries].sort((a, b) => b.value - a.value);
     const countries = sorted.map((item) => item.name);
     const values = sorted.map((item) => item.value);
     const visibleCount = 18;
-    const hasData = countries.length > 0;
-    const endValue = hasData ? Math.min(visibleCount - 1, countries.length - 1) : 0;
+    const hasItems = countries.length > 0;
+    const endValue = hasItems ? Math.min(visibleCount - 1, countries.length - 1) : 0;
 
     return {
       animationDuration: 450,
@@ -65,16 +71,6 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
           endValue,
           zoomOnMouseWheel: false,
         },
-        {
-          type: "slider",
-          yAxisIndex: 0,
-          width: 10,
-          right: 2,
-          top: 16,
-          bottom: 16,
-          startValue: 0,
-          endValue,
-        },
       ],
       series: [
         {
@@ -96,7 +92,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   }, [snapshot.countries]);
 
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!hasData || !chartRef.current) return;
 
     const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
     chart.setOption(option);
@@ -115,7 +111,16 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
       observer?.disconnect();
       chart.dispose();
     };
-  }, [option]);
+  }, [hasData, option]);
+
+  if (!hasData) {
+    return (
+      <EmptyState
+        title="No chart data"
+        description="Country exposure data has not been generated yet."
+      />
+    );
+  }
 
   return <div ref={chartRef} className="size-full" aria-label="Country exposure bar chart" />;
 }

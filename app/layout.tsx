@@ -29,9 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className="flex h-dvh flex-col overflow-hidden bg-background text-foreground pb-2">
+      <body className="flex h-dvh flex-col overflow-hidden bg-[#f2f4f7] text-foreground pb-2 dark:bg-[#0f1115]">
         <header
-          className="shrink-0 border-b border-black/10 bg-white/30 shadow-[0_6px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-black/25"
+          className="shrink-0 bg-white/30 shadow-[0_6px_24px_rgba(15,23,42,0.10)] dark:bg-black/25"
           style={{
             backdropFilter: "blur(16px) saturate(140%)",
             WebkitBackdropFilter: "blur(16px) saturate(140%)",
@@ -62,9 +62,9 @@ export default function RootLayout({
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 w-full overflow-hidden px-5 pt-5">{children}</main>
+        <main className="min-h-0 flex-1 w-full overflow-hidden bg-[#f2f4f7] px-5 pt-5 dark:bg-[#0f1115]">{children}</main>
 
-        <footer className="shrink-0 bg-white/60 dark:bg-black/35">
+        <footer className="shrink-0 bg-gradient-to-t from-[#e8edf3] to-[#eef2f7] dark:from-[#11141b] dark:to-[#151a22]">
           <div className="flex h-10 items-center justify-center px-5 text-sm font-medium text-muted-foreground">Powered by ClawRadar</div>
         </footer>
 
