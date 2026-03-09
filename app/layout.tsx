@@ -9,7 +9,7 @@ import { Github } from "lucide-react";
 import { HeaderIpSearch } from "@/components/header-ip-search";
 import { AppToaster } from "@/components/app-toaster";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "ClawRadar",
@@ -29,9 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className="min-h-screen bg-background text-foreground">
+      <body className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
         <header
-          className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-white/30 shadow-[0_6px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-black/25"
+          className="shrink-0 border-b border-black/10 bg-white/30 shadow-[0_6px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-black/25"
           style={{
             backdropFilter: "blur(16px) saturate(140%)",
             WebkitBackdropFilter: "blur(16px) saturate(140%)",
@@ -61,9 +61,15 @@ export default function RootLayout({
             </a>
           </div>
         </header>
-        <main className="mt-[calc(4rem+20px)] h-[calc(100dvh-4rem-40px)] w-full px-5 pb-5">
-          {children}
-        </main>
+
+        <main className="min-h-0 flex-1 w-full overflow-hidden px-5 py-5">{children}</main>
+
+        <footer className="shrink-0 border-t border-black/10 bg-white/60 dark:border-white/10 dark:bg-black/35">
+          <div className="flex h-9 items-center justify-center px-5 text-xs text-muted-foreground">
+            power by ClawRadar
+          </div>
+        </footer>
+
         <AppToaster />
       </body>
     </html>
