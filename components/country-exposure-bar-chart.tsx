@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BarChart3, PieChart as PieChartIcon } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, XAxis, YAxis } from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { ChartContainer, type ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -140,8 +140,16 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
           description="Country exposure data has not been generated yet."
         />
       ) : mode === "pie" ? (
-        <ChartContainer config={pieChartConfig} className="h-full w-full pt-10">
+        <ChartContainer config={pieChartConfig} className="h-full w-full pt-14">
           <PieChart>
+            <Legend
+              align="center"
+              verticalAlign="top"
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize: "11px", color: "var(--color-muted-foreground)", paddingTop: 2 }}
+              formatter={(value) => <span className="text-[11px] text-muted-foreground">{value}</span>}
+            />
             <ChartTooltip content={<ChartTooltipContent hideLabel />} />
             <Pie
               data={pieData}
@@ -187,4 +195,5 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
     </div>
   );
 }
+
 
