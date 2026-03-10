@@ -14,7 +14,6 @@ import { AppToaster } from "@/components/app-toaster";
 import { informationText } from "@/lib/ui-information";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
-const COPYRIGHT_START_YEAR = 2026;
 
 const THEME_INIT_SCRIPT = `
 (function () {
@@ -49,11 +48,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const currentYear = new Date().getFullYear();
-  const copyrightYearLabel =
-    currentYear > COPYRIGHT_START_YEAR
-      ? `${COPYRIGHT_START_YEAR}-${currentYear}`
-      : `${COPYRIGHT_START_YEAR}`;
 
   return (
     <html lang="en" className={cn("font-sans", geist.variable)} suppressHydrationWarning>
@@ -106,7 +100,7 @@ export default function RootLayout({
 
         <footer className="shrink-0 bg-background">
           <div className={cn("flex h-10 items-center justify-center px-5", informationText.l4Meta)}>
-            <span>{`Copyright (c) ${copyrightYearLabel} Kevin Lin`}</span>
+            <span>Copyright &copy; 2026 Kevin Lin</span>
             <span className="mx-1.5">|</span>
             <a
               href="https://kevinstack.dev"
@@ -124,3 +118,4 @@ export default function RootLayout({
     </html>
   );
 }
+
