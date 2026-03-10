@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 
+import { informationText } from "@/lib/ui-information";
 import { cn } from "@/lib/utils";
 
 export type ChartConfig = {
@@ -59,7 +60,7 @@ function ChartContainer({ id, className, children, config, ...props }: ChartCont
       <div
         data-chart={chartId}
         className={cn(
-          "h-full w-full [&_.recharts-cartesian-grid_line]:stroke-border/60 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border",
+          "h-full w-full [&_.recharts-cartesian-grid_line]:stroke-border/60 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_*]:stroke-border/60",
           className
         )}
         {...props}
@@ -99,8 +100,8 @@ function ChartTooltipContent({
   }
 
   return (
-    <div className={cn("rounded-md border border-border/80 bg-background px-2.5 py-1.5 text-xs shadow-sm", className)}>
-      {!hideLabel && label ? <p className="mb-1 text-[11px] text-muted-foreground">{label}</p> : null}
+    <div className={cn("rounded-md border border-border/80 bg-background px-2.5 py-1.5 shadow-sm", className)}>
+      {!hideLabel && label ? <p className={cn("mb-1", informationText.l4Meta)}>{label}</p> : null}
       <div className="space-y-1">
         {payload.map((item, index) => {
           const key = String(item.dataKey ?? "value");
@@ -113,9 +114,9 @@ function ChartTooltipContent({
                   className="inline-block h-2 w-2 rounded-[2px]"
                   style={{ backgroundColor: item.color ?? `var(--color-${key})` }}
                 />
-                <span className="text-muted-foreground">{labelText}</span>
+                <span className={informationText.l4Meta}>{labelText}</span>
               </div>
-              <span className="font-medium text-foreground">{item.value ?? "-"}</span>
+              <span className={informationText.rowValue}>{item.value ?? "-"}</span>
             </div>
           );
         })}
@@ -125,3 +126,4 @@ function ChartTooltipContent({
 }
 
 export { ChartContainer, ChartTooltip, ChartTooltipContent };
+

@@ -2,13 +2,17 @@
 
 import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
   IP_SEARCH_EVENT,
   type IpSearchResult,
 } from "@/lib/ip-search";
+import {
+  getIpSearchToastLevel,
+  showLeveledToast,
+  TOAST_IDS,
+} from "@/lib/ui-toast";
 
 export function HeaderIpSearch() {
   const [value, setValue] = useState("");
@@ -30,13 +34,11 @@ export function HeaderIpSearch() {
       });
 
       const result = (await response.json()) as IpSearchResult;
-      if (result.status === "not_found") {
-        toast.info(result.message, { id: "ip-search-feedback" });
-      } else if (result.status === "invalid") {
-        toast.warning(result.message, { id: "ip-search-feedback" });
-      } else if (result.status === "error") {
-        toast.error(result.message, { id: "ip-search-feedback" });
+      const level = getIpSearchToastLevel(result.status);
+      if (level) {
+        showLeveledToast(level, result.message, TOAST_IDS.ipSearchFeedback);
       }
+
       window.dispatchEvent(
         new CustomEvent(IP_SEARCH_EVENT, {
           detail: result,
@@ -46,10 +48,10 @@ export function HeaderIpSearch() {
       const fallback: IpSearchResult = {
         status: "error",
         ip: normalizedIp,
-        message: "搜索失败，请稍后重试。",
+        message: "Search failed, please try again.",
         point: null,
       };
-      toast.error(fallback.message, { id: "ip-search-feedback" });
+      showLeveledToast("error", fallback.message, TOAST_IDS.ipSearchFeedback);
       window.dispatchEvent(
         new CustomEvent(IP_SEARCH_EVENT, {
           detail: fallback,

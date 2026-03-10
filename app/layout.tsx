@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppToaster } from "@/components/app-toaster";
+import { informationText } from "@/lib/ui-information";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const COPYRIGHT_START_YEAR = 2026;
@@ -70,7 +71,9 @@ export default function RootLayout({
                 className="size-10 rounded-full border border-border bg-card"
                 priority
               />
-              <span className="hidden text-lg font-semibold tracking-tight sm:inline">ClawRadar</span>
+              <span className={cn("hidden tracking-tight sm:inline", informationText.l1Value)}>
+                ClawRadar
+              </span>
             </Link>
             <HeaderIpSearch />
             <div className="flex shrink-0 items-center gap-1">
@@ -102,14 +105,14 @@ export default function RootLayout({
         </main>
 
         <footer className="shrink-0 bg-background">
-          <div className="flex h-10 items-center justify-center px-5 text-sm font-medium text-muted-foreground">
-            <span>{`Copyright © ${copyrightYearLabel} Kevin Lin`}</span>
-            <span className="mx-1.5">·</span>
+          <div className={cn("flex h-10 items-center justify-center px-5", informationText.l4Meta)}>
+            <span>{`Copyright (c) ${copyrightYearLabel} Kevin Lin`}</span>
+            <span className="mx-1.5">|</span>
             <a
               href="https://kevinstack.dev"
               target="_blank"
               rel="noreferrer"
-              className="underline-offset-2 transition-colors hover:text-foreground hover:underline"
+              className={informationText.metaLink}
             >
               kevinstack.dev
             </a>

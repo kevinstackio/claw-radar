@@ -71,3 +71,13 @@
 - Do not add Base UI dependencies or imports (including @base-ui/* or base-ui).
 - For interactive primitives (Dialog, Tooltip, Tabs, etc.), use shadcn components backed by Radix.
 - If any future migration is needed, it must be proposed in docs first and approved before code changes.
+
+## 信息分级与 Toast 规则（强制）
+- 所有页面信息披露必须先按 L0-L4 分级，规则见 `docs/INFORMATION-HIERARCHY.md`。
+- 禁止未分级直接写样式；同级信息必须保持字号、字重、颜色一致。
+- Toast 必须按 `success/info/warning/error` 语义触发，并使用业务级固定 `id` 去重。
+- 提交前检查：是否存在“用 toast 替代页面说明”的情况，若有需回归页面内文案。
+
+## Token-First Check (Enforced)
+- Any UI change must follow: `reuse token -> define shared token -> hardcode as last resort`.
+- Hardcoded visual values in feature components should be treated as an exception and reviewed before commit.

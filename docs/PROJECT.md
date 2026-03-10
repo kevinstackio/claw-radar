@@ -87,3 +87,13 @@ pnpm dev
 - Do not add Base UI dependencies or imports (including @base-ui/* or base-ui).
 - For interactive primitives (Dialog, Tooltip, Tabs, etc.), use shadcn components backed by Radix.
 - If any future migration is needed, it must be proposed in docs first and approved before code changes.
+
+## 信息披露与 Toast 规范（强制）
+- 信息层级与 toast 分级统一遵循 `docs/INFORMATION-HIERARCHY.md`。
+- 新增/修改页面时，必须先做 L0-L4 分级，再落地样式与交互反馈。
+- toast 级别选择统一遵循：`error > warning > info > success`，并使用固定业务 `id` 去重。
+
+## Token-First Implementation Order (Enforced)
+- Before writing UI styles, check whether a shared token already exists.
+- If missing, define token first (theme or shared UI token file), then consume it in components.
+- Avoid direct one-off visual hardcoding in page/business components unless there is no reusable alternative.

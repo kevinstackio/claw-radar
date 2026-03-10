@@ -4,12 +4,13 @@ import type { CircleMarker as LeafletCircleMarker } from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 
-import type { ExposureSnapshot } from "@/lib/exposure-types";
 import { formatSnapshotTimestamp } from "@/lib/datetime";
+import type { ExposureSnapshot } from "@/lib/exposure-types";
 import {
   IP_SEARCH_EVENT,
   type IpSearchResult,
 } from "@/lib/ip-search";
+import { informationLayout } from "@/lib/ui-information";
 
 type ExposureMapClientProps = {
   snapshot: ExposureSnapshot;
@@ -156,6 +157,15 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
             14
           );
 
+          const popupRows = [
+            { label: "IP", value: point.ip },
+            { label: "Country", value: point.country },
+            { label: "Records", value: point.count.toString() },
+            { label: "Ports", value: point.portSummary || "N/A" },
+            { label: "Coord", value: `${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` },
+            { label: "Updated", value: generatedAtLabel },
+          ];
+
           return (
             <CircleMarker
               key={pointKey}
@@ -176,25 +186,13 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
               }}
             >
               <Popup>
-                <div className="space-y-1 text-xs">
-                  <div>
-                    <strong>IP:</strong> {point.ip}
-                  </div>
-                  <div>
-                    <strong>Country:</strong> {point.country}
-                  </div>
-                  <div>
-                    <strong>Records:</strong> {point.count}
-                  </div>
-                  <div>
-                    <strong>Ports:</strong> {point.portSummary || "N/A"}
-                  </div>
-                  <div>
-                    <strong>Coord:</strong> {point.lat.toFixed(4)}, {point.lon.toFixed(4)}
-                  </div>
-                  <div>
-                    <strong>Updated:</strong> {generatedAtLabel}
-                  </div>
+                <div className={informationLayout.popupContainer}>
+                  {popupRows.map((row) => (
+                    <div key={row.label} className={informationLayout.popupRow}>
+                      <span className={informationLayout.popupLabel}>{row.label}</span>
+                      <span className={informationLayout.popupValue}>{row.value}</span>
+                    </div>
+                  ))}
                 </div>
               </Popup>
             </CircleMarker>

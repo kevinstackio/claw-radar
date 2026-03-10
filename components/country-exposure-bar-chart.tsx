@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ChartContainer, type ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { ExposureSnapshot } from "@/lib/exposure-types";
+import { informationChart, informationLayout, informationText } from "@/lib/ui-information";
+import { cn } from "@/lib/utils";
 
 type CountryExposureBarChartProps = {
   snapshot: ExposureSnapshot;
@@ -79,8 +81,8 @@ function PieCountryTooltip({
       : typeof item?.value === "number"
       ? item.value.toLocaleString()
       : typeof item?.value === "string" && item.value.trim().length > 0
-        ? item.value
-        : "-";
+      ? item.value
+      : "-";
   const markerColor = item?.payload?.color ?? item?.color ?? "var(--muted-foreground)";
 
   if (!active || !item) {
@@ -88,14 +90,14 @@ function PieCountryTooltip({
   }
 
   return (
-    <div className="rounded-md border border-border/80 bg-background px-2.5 py-1.5 text-xs shadow-sm">
-      <p className="mb-1 text-[11px] text-muted-foreground">{country}</p>
+    <div className="rounded-md border border-border/80 bg-background px-2.5 py-1.5 shadow-sm">
+      <p className={cn("mb-1", informationText.l3Label)}>{country}</p>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: markerColor }} />
-          <span className="text-muted-foreground">Records</span>
+          <span className={informationText.l4Meta}>Records</span>
         </div>
-        <span className="font-medium text-foreground">{count}</span>
+        <span className={informationText.rowValue}>{count}</span>
       </div>
     </div>
   );
@@ -142,8 +144,8 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   return (
     <div className="relative size-full">
       <div className="absolute left-3 top-3 z-20">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+        <p className={informationLayout.sectionTitle}>{title}</p>
+        <p className={informationLayout.sectionSubtitle}>{subtitle}</p>
       </div>
 
       <div className="absolute right-3 top-3 z-20 inline-flex h-9 items-center gap-1 rounded-md border border-border/80 bg-background/95 p-1 text-muted-foreground shadow-sm">
@@ -182,8 +184,8 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               verticalAlign="top"
               iconType="circle"
               iconSize={8}
-              wrapperStyle={{ fontSize: "11px", color: "var(--color-muted-foreground)", paddingTop: 2 }}
-              formatter={(value) => <span className="text-[11px] text-muted-foreground">{value}</span>}
+              wrapperStyle={{ fontSize: informationChart.legendFontSize, color: "var(--color-muted-foreground)", paddingTop: 2 }}
+              formatter={(value) => <span className={informationText.l3Label}>{value}</span>}
             />
             <ChartTooltip cursor={false} content={<PieCountryTooltip />} />
             <Pie
@@ -193,8 +195,8 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               startAngle={90}
               endAngle={-270}
               cx="50%"
-              cy="57%"
-              outerRadius="62%"
+              cy={informationChart.pieCenterY}
+              outerRadius={informationChart.pieOuterRadius}
               innerRadius={0}
               isAnimationActive
             >
@@ -213,7 +215,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: informationChart.axisFontSize, fill: "var(--color-muted-foreground)" }}
             />
             <YAxis
               dataKey="country"
@@ -221,11 +223,11 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              width={92}
-              tick={{ fontSize: 10 }}
+              width={informationChart.yAxisWidth}
+              tick={{ fontSize: informationChart.axisFontSize, fill: "var(--color-muted-foreground)" }}
             />
             <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-            <Bar dataKey="records" fill="var(--color-records)" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="records" fill="var(--color-records)" radius={informationChart.barRadius} />
           </BarChart>
         </ChartContainer>
       )}
