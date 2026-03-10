@@ -73,7 +73,6 @@ pnpm dev
 - `pnpm lint`：执行代码检查
 - `pnpm format:check`：格式规则检查（基于 ESLint）
 - `pnpm verify`：完整校验（format + lint + build）
-- `pnpm hooks:install`：安装本仓库 Git hooks（pre-commit / pre-push）
 - `pnpm netlas:fetch`：调用 Netlas API 拉取并落盘本地快照
 
 ## Git Hook（推荐）
@@ -81,7 +80,7 @@ pnpm dev
 为避免“本地没问题，推送后构建失败”的情况，建议启用仓库自带 hooks：
 
 ```bash
-pnpm hooks:install
+git config core.hooksPath .githooks
 ```
 
 启用后：

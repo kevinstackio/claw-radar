@@ -64,7 +64,7 @@
 - 包管理器仅允许使用 `pnpm`，禁止使用 `npm` 或 `yarn`。
 - 提交或推送前至少通过一次 `pnpm verify`（如果任务涉及代码改动）。
 - 只要用户提出“提交/commit”，必须先检查当前改动是否需要同步更新 `docs/`；要明确判断应更新哪份文档，必要时新增文档，且避免“为了更新而更新”。
-- 建议在本地执行 `pnpm hooks:install` 启用 Git hooks（pre-commit / pre-push）。
+- 建议在本地执行 `git config core.hooksPath .githooks` 启用 Git hooks（pre-commit / pre-push）。
 - 影响行为的改动必须在说明中写清“改了什么、为什么、影响范围”。
 
 ## Radix-only Policy (Enforced)
