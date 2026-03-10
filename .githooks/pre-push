@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -e
+
+run_pnpm() {
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm "$@"
+    return
+  fi
+
+  if command -v corepack >/dev/null 2>&1; then
+    corepack pnpm "$@"
+    return
+  fi
+
+  echo "[hook] error: pnpm/corepack not found in PATH."
+  exit 1
+}
+
+echo "[pre-push] running full verify (format + lint + build)..."
+run_pnpm verify

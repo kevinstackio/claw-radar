@@ -26,7 +26,7 @@ export const informationChart = {
   legendFontSize: 11,
   axisFontSize: 10,
   yAxisWidth: 92,
-  barRadius: [0, 4, 4, 0] as const,
+  barRadius: [0, 4, 4, 0] as [number, number, number, number],
   pieCenterY: "57%",
   pieOuterRadius: "62%",
 };
