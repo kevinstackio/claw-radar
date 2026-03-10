@@ -81,3 +81,9 @@ pnpm dev
 - `pnpm start`：启动生产服务
 - `pnpm lint`：执行代码检查
 - `pnpm netlas:fetch`：调用 Netlas API 并写入本地备份（Free 自动化推荐）
+
+## Radix-only Policy (Enforced)
+- This project uses shadcn/ui with Radix primitives only.
+- Do not add Base UI dependencies or imports (including @base-ui/* or base-ui).
+- For interactive primitives (Dialog, Tooltip, Tabs, etc.), use shadcn components backed by Radix.
+- If any future migration is needed, it must be proposed in docs first and approved before code changes.

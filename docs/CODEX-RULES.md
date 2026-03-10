@@ -65,3 +65,9 @@
 - 提交前至少通过一次 `pnpm lint`（如果任务涉及代码改动）。
 - 只要用户提出“提交/commit”，必须先检查当前改动是否需要同步更新 `docs/`；要明确判断应更新哪份文档，必要时新增文档，且避免“为了更新而更新”。
 - 影响行为的改动必须在说明中写清“改了什么、为什么、影响范围”。
+
+## Radix-only Policy (Enforced)
+- This project uses shadcn/ui with Radix primitives only.
+- Do not add Base UI dependencies or imports (including @base-ui/* or base-ui).
+- For interactive primitives (Dialog, Tooltip, Tabs, etc.), use shadcn components backed by Radix.
+- If any future migration is needed, it must be proposed in docs first and approved before code changes.
