@@ -7,6 +7,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Github } from "lucide-react";
 import { HeaderIpSearch } from "@/components/header-ip-search";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppToaster } from "@/components/app-toaster";
 
@@ -72,16 +74,25 @@ export default function RootLayout({
             </Link>
             <HeaderIpSearch />
             <div className="flex shrink-0 items-center gap-1">
-              <ThemeToggle />
-              <a
-                href="https://github.com/kevinstackio/claw-radar"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="GitHub Profile"
-                className="inline-flex size-10 items-center justify-center text-foreground/80 transition-colors hover:text-foreground"
-              >
-                <Github className="size-6" strokeWidth={2.2} />
-              </a>
+              <TooltipProvider delayDuration={120}>
+                <ThemeToggle />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button asChild variant="ghost" size="icon" className="size-10 shrink-0">
+                      <a
+                        href="https://github.com/kevinstackio/claw-radar"
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="GitHub Profile"
+                      >
+                        <Github className="size-6" strokeWidth={2.2} />
+                      </a>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Open GitHub repository</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </header>

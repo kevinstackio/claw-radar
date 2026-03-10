@@ -49,6 +49,7 @@
 - 第三方组件接入必须先封装一层业务组件，禁止在页面中大面积直接散落第三方 API 调用。
 - 所有新增/修改组件必须支持白天/黑夜模式。
 - 颜色、边框、背景、阴影优先使用主题 token（如 `bg-background`、`text-foreground`、`border-border`），避免在组件中写死十六进制颜色。
+- 图标统一使用 `lucide-react`，禁止混用多套图标库；新增图标需与现有线性风格保持一致。
 - 如第三方库必须使用显式颜色值，必须同时提供 light/dark 两套映射，并通过主题状态切换。
 
 ## 视觉一致性规范（强制）
@@ -59,7 +60,10 @@
 - 边框统一使用 `border-border`，分隔线统一走 `border-t / border-b + border-border`。
 - 阴影优先使用语义化层级（`shadow-sm / shadow`），避免随意自定义大阴影。
 - 动效统一以 `transition-colors` 为主，默认时长 `duration-200`；复杂动效应保持轻量并可预期。
+- 交互组件优先使用 shadcn 体系（Button/Tooltip/Dialog/Tabs 等），避免自写交互基础层。
+- 交互提示禁止依赖原生 `title` 作为主要方案，优先使用 shadcn `Tooltip`。
 - 交互状态（hover / active / focus / disabled）必须在 light/dark 下都保持可读与对比度一致。
+- 图标按钮与主题按钮的 hover/focus/active 反馈需保持一致，优先复用 `Button` 组件语义。
 
 ## 本地开发
 

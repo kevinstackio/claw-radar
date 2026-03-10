@@ -153,7 +153,6 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
           className="h-7 w-7 rounded-sm"
           variant={mode === "pie" ? "secondary" : "ghost"}
           onClick={() => setMode("pie")}
-          title="Pie chart"
           aria-label="Switch to pie chart"
         >
           <PieChartIcon className="h-3.5 w-3.5" />
@@ -164,7 +163,6 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
           className="h-7 w-7 rounded-sm"
           variant={mode === "bar" ? "secondary" : "ghost"}
           onClick={() => setMode("bar")}
-          title="Bar chart"
           aria-label="Switch to bar chart"
         >
           <BarChart3 className="h-3.5 w-3.5" />
