@@ -59,7 +59,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                           monitor online assets.
                         </p>
                         <div className="flex justify-end">
-                          <Button asChild variant="outline" size="sm" className="bg-white text-slate-900 border-slate-200 hover:bg-slate-100">
+                          <Button asChild variant="outline" size="sm">
                             <a href="https://netlas.io/" target="_blank" rel="noreferrer">
                               <span>visit netlas</span>
                             </a>
@@ -71,7 +71,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                 </div>
               </ResizablePanel>
 
-              <ResizableHandle withHandle handleIcon="horizontal" handleClassName="h-4 w-8 rounded-[5px]" />
+              <ResizableHandle withHandle handleIcon="horizontal" handleClassName="h-4 w-8 rounded-sm" />
 
               <ResizablePanel defaultSize={62} minSize={35} className="min-h-0">
                 <div className="h-full min-h-0 overflow-hidden bg-card/70">
@@ -81,7 +81,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
             </ResizablePanelGroup>
           </ResizablePanel>
 
-          <ResizableHandle withHandle className="z-[1400] w-px after:w-10" handleIcon="vertical" handleClassName="h-8 w-4 rounded-[5px]" />
+          <ResizableHandle withHandle className="z-[1400] w-px after:w-10" handleIcon="vertical" handleClassName="h-8 w-4 rounded-sm" />
 
           <ResizablePanel defaultSize={76} minSize={52} className="min-w-0">
             <div className="h-full min-h-0 overflow-hidden bg-card/70">

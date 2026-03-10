@@ -8,7 +8,6 @@ html,
 body {
   margin: 0;
   padding: 0;
-  font-family: Arial, Helvetica, sans-serif;
 }
 
 :root {
@@ -44,6 +43,10 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --map-marker-stroke: oklch(0.55 0.12 70);
+  --map-marker-fill: oklch(0.78 0.14 75);
+  --map-marker-selected-stroke: oklch(0.44 0.1 250);
+  --map-marker-selected-fill: oklch(0.74 0.14 242);
 }
 
 .dark {
@@ -78,6 +81,10 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --map-marker-stroke: oklch(0.72 0.11 85);
+  --map-marker-fill: oklch(0.82 0.13 82);
+  --map-marker-selected-stroke: oklch(0.74 0.10 246);
+  --map-marker-selected-fill: oklch(0.82 0.12 242);
 }
 
 @theme inline {

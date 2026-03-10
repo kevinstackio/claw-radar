@@ -40,6 +40,27 @@
 - `scripts/`：本地执行脚本（例如 Netlas 数据抓取）
 - `data/backups/`：本地备份数据（默认 git 忽略）
 
+## 组件与主题规范（强制）
+
+- 基础组件必须使用 shadcn/ui 体系，统一放在 `components/ui/`（例如 `Button`、`Tabs`、`Dialog`、`Input`）。
+- 简单业务组件必须通过基础组件组合实现，不直接引入第二套基础 UI 框架。
+- 业务层组件默认放在 `components/`，并复用 `components/ui/` 的能力与样式 token。
+- 第三方组件库仅在 shadcn/ui 不适合的场景引入，例如地图、图表、富文本、可视化引擎。
+- 第三方组件接入必须先封装一层业务组件，禁止在页面中大面积直接散落第三方 API 调用。
+- 所有新增/修改组件必须支持白天/黑夜模式。
+- 颜色、边框、背景、阴影优先使用主题 token（如 `bg-background`、`text-foreground`、`border-border`），避免在组件中写死十六进制颜色。
+- 如第三方库必须使用显式颜色值，必须同时提供 light/dark 两套映射，并通过主题状态切换。
+
+## 视觉一致性规范（强制）
+
+- 字体统一使用全局 `--font-sans`（Next Font 注入），禁止在页面或组件中直接声明 `font-family`。
+- 颜色统一使用主题 token（`background / foreground / muted / border / ring / primary`），禁止新增硬编码颜色。
+- 圆角统一使用设计 token（`rounded-sm / rounded-md / rounded-lg` 等），避免任意像素圆角；确有必要需注明原因。
+- 边框统一使用 `border-border`，分隔线统一走 `border-t / border-b + border-border`。
+- 阴影优先使用语义化层级（`shadow-sm / shadow`），避免随意自定义大阴影。
+- 动效统一以 `transition-colors` 为主，默认时长 `duration-200`；复杂动效应保持轻量并可预期。
+- 交互状态（hover / active / focus / disabled）必须在 light/dark 下都保持可读与对比度一致。
+
 ## 本地开发
 
 > 包管理器约定：本项目仅允许使用 pnpm，请勿使用 npm 或 yarn。

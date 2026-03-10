@@ -169,9 +169,9 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
               center={[point.lat, point.lon]}
               radius={radius}
               pathOptions={{
-                color: isSelected ? "#0c4a6e" : "#a16207",
+                color: isSelected ? "var(--map-marker-selected-stroke)" : "var(--map-marker-stroke)",
                 weight: isSelected ? 2 : 1,
-                fillColor: isSelected ? "#38bdf8" : "#f59e0b",
+                fillColor: isSelected ? "var(--map-marker-selected-fill)" : "var(--map-marker-fill)",
                 fillOpacity: isSelected ? 0.95 : 0.82,
               }}
             >

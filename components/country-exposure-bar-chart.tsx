@@ -40,11 +40,11 @@ const pieChartConfig = {
     color: "var(--chart-1)",
   },
   c1: { label: "Slice 1", color: "var(--chart-1)" },
-  c2: { label: "Slice 2", color: "oklch(0.86 0.09 251.813)" },
-  c3: { label: "Slice 3", color: "oklch(0.90 0.075 251.813)" },
-  c4: { label: "Slice 4", color: "oklch(0.94 0.055 251.813)" },
-  c5: { label: "Slice 5", color: "oklch(0.97 0.03 251.813)" },
-  c6: { label: "Others", color: "#e2e8f0" },
+  c2: { label: "Slice 2", color: "var(--chart-2)" },
+  c3: { label: "Slice 3", color: "var(--chart-3)" },
+  c4: { label: "Slice 4", color: "var(--chart-4)" },
+  c5: { label: "Slice 5", color: "var(--chart-5)" },
+  c6: { label: "Others", color: "var(--muted)" },
 } satisfies ChartConfig;
 
 const PIE_COLORS = [
