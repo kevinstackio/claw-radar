@@ -2,9 +2,14 @@ name: Netlas Sync
 
 on:
   schedule:
-    # 00:20 Asia/Shanghai = 16:20 UTC (previous day)
-    - cron: "20 16 * * *"
+    # 01:00 Asia/Shanghai = 17:00 UTC (previous day)
+    - cron: "0 17 * * *"
   workflow_dispatch:
+    inputs:
+      max_keys:
+        description: "Max Netlas API keys to validate in this run"
+        required: false
+        default: "2"
 
 permissions:
   contents: read
@@ -29,7 +34,7 @@ jobs:
       NETLAS_TIMEOUT_MS: ${{ vars.NETLAS_TIMEOUT_MS }}
       NETLAS_VALIDATION_QUERY: ${{ vars.NETLAS_VALIDATION_QUERY }}
       NETLAS_VALIDATION_START: ${{ vars.NETLAS_VALIDATION_START }}
-      NETLAS_VALIDATION_MAX_KEYS: ${{ vars.NETLAS_VALIDATION_MAX_KEYS }}
+      NETLAS_VALIDATION_MAX_KEYS: ${{ github.event.inputs.max_keys || vars.NETLAS_VALIDATION_MAX_KEYS || '2' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
