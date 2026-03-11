@@ -168,7 +168,10 @@ async function resolveLatestBackupFile(): Promise<string | null> {
     const pointerRaw = await readFile(latestPointer, "utf-8");
     const pointer = JSON.parse(pointerRaw) as { latestBackup?: string };
     if (pointer.latestBackup && typeof pointer.latestBackup === "string") {
-      const fromPointer = path.join(process.cwd(), pointer.latestBackup);
+      const normalizedBackupPath = pointer.latestBackup.replace(/[\\/]+/g, path.sep);
+      const fromPointer = path.isAbsolute(normalizedBackupPath)
+        ? normalizedBackupPath
+        : path.join(process.cwd(), normalizedBackupPath);
       return fromPointer;
     }
   } catch {

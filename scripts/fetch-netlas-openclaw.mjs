@@ -7,12 +7,33 @@ const DEFAULT_BASE_URL = "https://app.netlas.io";
 const SEARCH_PATH = "/api/responses/";
 
 function asInt(value, fallback) {
-  const parsed = Number.parseInt(value ?? "", 10);
+  const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function toBool(value) {
   return /^(1|true|yes|on)$/i.test(String(value ?? "").trim());
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseApiKeys() {
+  const list = String(process.env.NETLAS_API_KEYS ?? "")
+    .split(/[\n,]/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  const numbered = Object.keys(process.env)
+    .filter((key) => /^NETLAS_API_KEY_\d+$/.test(key))
+    .sort((a, b) => Number(a.split("_").pop()) - Number(b.split("_").pop()))
+    .map((key) => String(process.env[key] ?? "").trim())
+    .filter(Boolean);
+
+  const single = String(process.env.NETLAS_API_KEY ?? "").trim();
+  const merged = [...list, ...numbered, ...(single ? [single] : [])];
+  return [...new Set(merged)];
 }
 
 function normalizeIp(value) {
@@ -43,76 +64,120 @@ function toPort(value) {
   return null;
 }
 
-function mapNetlasItemToHit(item, sourceQuery) {
+function isPublicIPv4(ip) {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return false;
+
+  const nums = parts.map((part) => Number.parseInt(part, 10));
+  if (nums.some((num) => !Number.isInteger(num) || num < 0 || num > 255)) return false;
+
+  const [a, b] = nums;
+  if (a === 10) return false;
+  if (a === 127) return false;
+  if (a === 0) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a >= 224) return false;
+
+  return true;
+}
+
+function isPublicIPv6(ip) {
+  const value = ip.toLowerCase();
+  if (!/^[0-9a-f:]+$/.test(value)) return false;
+  if (value === "::1") return false;
+  if (value.startsWith("fc") || value.startsWith("fd")) return false;
+  if (value.startsWith("fe8") || value.startsWith("fe9") || value.startsWith("fea") || value.startsWith("feb")) {
+    return false;
+  }
+  return true;
+}
+
+function isPublicIp(ip) {
+  if (!ip) return false;
+  if (ip.includes(".")) return isPublicIPv4(ip);
+  if (ip.includes(":")) return isPublicIPv6(ip);
+  return false;
+}
+
+function isValidCoordinate(latitude, longitude) {
+  return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+}
+
+function mapNetlasItem(item) {
   const data = item && typeof item === "object" && item.data && typeof item.data === "object" ? item.data : {};
+
   const ip = normalizeIp(String(data.ip ?? item.ip ?? ""));
-  const port = toPort(data.port ?? item.port);
-  const country =
+  const port = toPort(data.port ?? item.port ?? data.service?.port);
+  const latitude = toNumber(data.geo?.location?.lat ?? data.latitude ?? data.location?.coordinates?.latitude);
+  const longitude = toNumber(data.geo?.location?.lon ?? data.longitude ?? data.location?.coordinates?.longitude);
+  const countryRaw =
     (typeof data.geo?.country === "string" && data.geo.country.trim()) ||
     (typeof data.country === "string" && data.country.trim()) ||
-    "";
-  const latitude = toNumber(data.geo?.location?.lat ?? data.latitude);
-  const longitude = toNumber(data.geo?.location?.lon ?? data.longitude);
+    "Unknown";
+  const country = countryRaw.trim() || "Unknown";
+  const protocolRaw =
+    (typeof data.protocol === "string" && data.protocol.trim()) ||
+    (typeof data.service?.protocol === "string" && data.service.protocol.trim()) ||
+    (typeof data.transport === "string" && data.transport.trim()) ||
+    "unknown";
+  const protocol = protocolRaw.toLowerCase();
 
-  const hit = {
+  return {
     ip,
-    port: port ?? undefined,
+    port,
+    latitude,
+    longitude,
+    country,
+    protocol,
+    raw: data,
+  };
+}
+
+function validateMappedHit(mapped) {
+  if (!mapped.ip || !isPublicIp(mapped.ip)) {
+    return { valid: false, reason: "invalid_or_non_public_ip" };
+  }
+
+  if (mapped.latitude === null || mapped.longitude === null || !isValidCoordinate(mapped.latitude, mapped.longitude)) {
+    return { valid: false, reason: "invalid_coordinates" };
+  }
+
+  return { valid: true, reason: null };
+}
+
+function toFingerprint(mapped) {
+  return [
+    mapped.ip,
+    mapped.port ?? 0,
+    mapped.protocol,
+    mapped.country.toLowerCase(),
+    mapped.latitude.toFixed(4),
+    mapped.longitude.toFixed(4),
+  ].join("|");
+}
+
+function mapNetlasItemToHit(mapped, sourceQuery) {
+  return {
+    ip: mapped.ip,
+    port: mapped.port ?? undefined,
+    protocol: mapped.protocol,
     location: {
-      country: country || undefined,
-      country_name: country || undefined,
+      country: mapped.country,
+      country_name: mapped.country,
       coordinates: {
-        latitude: latitude ?? undefined,
-        longitude: longitude ?? undefined,
+        latitude: mapped.latitude,
+        longitude: mapped.longitude,
       },
     },
-    netlas: data,
+    netlas: mapped.raw,
     _source: {
       provider: "netlas",
       query: sourceQuery,
     },
   };
-
-  return hit;
-}
-
-async function fetchPage({ baseUrl, apiKey, query, start, timeoutMs }) {
-  const endpoint = new URL(SEARCH_PATH, baseUrl);
-  endpoint.searchParams.set("q", query);
-  endpoint.searchParams.set("start", String(start));
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response;
-  let text = "";
-  try {
-    response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      signal: controller.signal,
-    });
-    text = await response.text();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Network error while calling Netlas API: ${message}`);
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (!response.ok) {
-    const detail = text.slice(0, 500).replace(/\s+/g, " ").trim();
-    throw new Error(`Netlas API returned ${response.status} ${response.statusText}. ${detail}`);
-  }
-
-  try {
-    const payload = JSON.parse(text);
-    return payload;
-  } catch {
-    throw new Error(`Netlas API returned non-JSON payload: ${text.slice(0, 200)}`);
-  }
 }
 
 function extractItems(payload) {
@@ -123,7 +188,98 @@ function extractItems(payload) {
   return [];
 }
 
-async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, includeRawPages }) {
+function isRetryableStatus(status) {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function shouldSwitchKeyForError(message) {
+  const text = String(message ?? "").toLowerCase();
+  return text.includes(" 401 ") || text.includes(" 402 ") || text.includes(" 403 ") || text.includes(" 429 ");
+}
+
+async function fetchPage({ baseUrl, apiKey, query, start, timeoutMs, maxRetries, retryBaseMs }) {
+  const endpoint = new URL(SEARCH_PATH, baseUrl);
+  endpoint.searchParams.set("q", query);
+  endpoint.searchParams.set("start", String(start));
+
+  let attempt = 0;
+
+  while (attempt <= maxRetries) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response;
+    let text = "";
+
+    try {
+      response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        signal: controller.signal,
+      });
+
+      text = await response.text();
+
+      if (!response.ok) {
+        const detail = text.slice(0, 500).replace(/\s+/g, " ").trim();
+        if (isRetryableStatus(response.status) && attempt < maxRetries) {
+          const retryAfterHeader = response.headers.get("retry-after");
+          const retryAfterMs = retryAfterHeader ? Math.max(asInt(retryAfterHeader, 1), 1) * 1000 : 0;
+          const backoffMs = retryAfterMs || retryBaseMs * (attempt + 1);
+          attempt += 1;
+          await sleep(backoffMs);
+          continue;
+        }
+        throw new Error(`Netlas API returned ${response.status} ${response.statusText}. ${detail}`);
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`Netlas API returned non-JSON payload: ${text.slice(0, 200)}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < maxRetries) {
+        attempt += 1;
+        await sleep(retryBaseMs * attempt);
+        continue;
+      }
+      throw new Error(`Network error while calling Netlas API: ${message}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw new Error("Unexpected fetch retry loop exit.");
+}
+
+async function fetchPageWithKeyPool({ apiKeys, activeKeyIndex, ...rest }) {
+  let currentIndex = activeKeyIndex;
+  let lastError = null;
+
+  for (let tries = 0; tries < apiKeys.length; tries += 1) {
+    const apiKey = apiKeys[currentIndex];
+
+    try {
+      const payload = await fetchPage({ ...rest, apiKey });
+      return { payload, keyIndex: currentIndex };
+    } catch (error) {
+      lastError = error;
+      if (apiKeys.length === 1 || !shouldSwitchKeyForError(error instanceof Error ? error.message : String(error))) {
+        throw error;
+      }
+      currentIndex = (currentIndex + 1) % apiKeys.length;
+    }
+  }
+
+  throw lastError ?? new Error("All Netlas API keys failed.");
+}
+
+async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, includeRawPages, collectionStats, stopReason }) {
   const now = new Date();
   const iso = now.toISOString();
   const day = iso.slice(0, 10);
@@ -141,6 +297,8 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
       query,
       pagesFetched,
       hitCount: hits.length,
+      stopReason,
+      collectionStats,
     },
     pages: rawPages.map((page, index) => ({
       page: index + 1,
@@ -162,9 +320,10 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
     `${JSON.stringify(
       {
         generatedAt: iso,
-        latestBackup: path.relative(process.cwd(), backupFile),
+        latestBackup: path.relative(process.cwd(), backupFile).split(path.sep).join("/"),
         hitCount: hits.length,
         pagesFetched,
+        stopReason,
       },
       null,
       2
@@ -172,11 +331,11 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
     "utf-8"
   );
 
-  return { backupFile, latestFile, hitCount: hits.length };
+  return { backupFile, latestFile, hitCount: hits.length, stopReason };
 }
 
 async function main() {
-  const apiKey = process.env.NETLAS_API_KEY?.trim();
+  const apiKeys = parseApiKeys();
   const query = process.env.NETLAS_QUERY?.trim() || "port:18789";
   const baseUrl = (process.env.NETLAS_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const maxPages = asInt(process.env.NETLAS_MAX_PAGES, 5);
@@ -184,8 +343,14 @@ async function main() {
   const timeoutMs = asInt(process.env.NETLAS_TIMEOUT_MS, 30000);
   const includeRawPages = toBool(process.env.NETLAS_INCLUDE_RAW_PAGES);
 
-  if (!apiKey) {
-    throw new Error("Missing required env: NETLAS_API_KEY");
+  const minNewPerPage = asInt(process.env.NETLAS_MIN_NEW_PER_PAGE, 3);
+  const maxLowNewPages = asInt(process.env.NETLAS_MAX_LOW_NEW_PAGES, 2);
+  const duplicateRatioStop = Number.parseFloat(String(process.env.NETLAS_DUPLICATE_RATIO_STOP ?? "0.92"));
+  const maxRetries = asInt(process.env.NETLAS_FETCH_RETRIES, 1);
+  const retryBaseMs = asInt(process.env.NETLAS_RETRY_BASE_MS, 800);
+
+  if (apiKeys.length === 0) {
+    throw new Error("Missing required env: NETLAS_API_KEY / NETLAS_API_KEYS / NETLAS_API_KEY_1");
   }
   if (!query) {
     throw new Error("Missing required env: NETLAS_QUERY");
@@ -199,51 +364,117 @@ async function main() {
 
   const rawPages = [];
   const hits = [];
+  const seenFingerprints = new Set();
+  const pageStats = [];
+
+  let activeKeyIndex = 0;
+  let consecutiveLowNewPages = 0;
+  let stopReason = "max_pages_reached";
 
   for (let page = 0; page < maxPages; page += 1) {
     const start = page * startStep;
-    const payload = await fetchPage({ baseUrl, apiKey, query, start, timeoutMs });
+
+    const { payload, keyIndex } = await fetchPageWithKeyPool({
+      apiKeys,
+      activeKeyIndex,
+      baseUrl,
+      query,
+      start,
+      timeoutMs,
+      maxRetries,
+      retryBaseMs,
+    });
+
+    activeKeyIndex = keyIndex;
     rawPages.push(payload);
 
     const items = extractItems(payload);
     if (items.length === 0) {
+      stopReason = "empty_page";
       break;
     }
 
-    items.forEach((item) => {
-      hits.push(mapNetlasItemToHit(item, query));
-    });
+    const stat = {
+      page: page + 1,
+      start,
+      rawItems: items.length,
+      newHits: 0,
+      duplicateHits: 0,
+      invalidHits: 0,
+      keyIndex: keyIndex + 1,
+    };
+
+    for (const item of items) {
+      const mapped = mapNetlasItem(item);
+      const validation = validateMappedHit(mapped);
+
+      if (!validation.valid) {
+        stat.invalidHits += 1;
+        continue;
+      }
+
+      const fingerprint = toFingerprint(mapped);
+      if (seenFingerprints.has(fingerprint)) {
+        stat.duplicateHits += 1;
+        continue;
+      }
+
+      seenFingerprints.add(fingerprint);
+      stat.newHits += 1;
+      hits.push(mapNetlasItemToHit(mapped, query));
+    }
+
+    pageStats.push(stat);
+
+    const duplicateRatio = stat.rawItems > 0 ? stat.duplicateHits / stat.rawItems : 0;
+    const lowNew = stat.newHits < minNewPerPage || duplicateRatio >= duplicateRatioStop;
+
+    if (lowNew) {
+      consecutiveLowNewPages += 1;
+    } else {
+      consecutiveLowNewPages = 0;
+    }
+
+    if (stat.newHits === 0) {
+      stopReason = "zero_new_hits";
+      break;
+    }
+
+    if (consecutiveLowNewPages >= maxLowNewPages) {
+      stopReason = "low_incremental_yield";
+      break;
+    }
 
     if (items.length < startStep) {
+      stopReason = "last_page_short";
       break;
     }
   }
 
-  const dedupedMap = new Map();
-  hits.forEach((hit) => {
-    const lat = toNumber(hit.location?.coordinates?.latitude);
-    const lon = toNumber(hit.location?.coordinates?.longitude);
-    const key = `${normalizeIp(hit.ip)}|${hit.port ?? 0}|${lat !== null ? lat.toFixed(4) : "na"}|${
-      lon !== null ? lon.toFixed(4) : "na"
-    }`;
-    if (!dedupedMap.has(key)) {
-      dedupedMap.set(key, hit);
-    }
-  });
+  const collectionStats = {
+    totalRawItems: pageStats.reduce((acc, s) => acc + s.rawItems, 0),
+    totalNewHits: pageStats.reduce((acc, s) => acc + s.newHits, 0),
+    totalDuplicateHits: pageStats.reduce((acc, s) => acc + s.duplicateHits, 0),
+    totalInvalidHits: pageStats.reduce((acc, s) => acc + s.invalidHits, 0),
+    pageStats,
+  };
 
-  const dedupedHits = [...dedupedMap.values()];
   const result = await writeBackup({
     query,
     baseUrl,
-    hits: dedupedHits,
+    hits,
     pagesFetched: rawPages.length,
     rawPages,
     includeRawPages,
+    collectionStats,
+    stopReason,
   });
 
   console.log(`Backup written: ${result.backupFile}`);
   console.log(`Latest pointer: ${result.latestFile}`);
   console.log(`Fetched ${result.hitCount} deduped records across ${rawPages.length} page(s).`);
+  console.log(`Stop reason: ${result.stopReason}`);
+  console.log(`Collection stats: ${JSON.stringify(collectionStats)}`);
 }
 
 main().catch((error) => {

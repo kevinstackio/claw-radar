@@ -10,7 +10,8 @@
     "lint": "eslint",
     "format:check": "eslint . --fix-dry-run --max-warnings=0",
     "verify": "pnpm format:check && pnpm lint && pnpm build",
-    "netlas:fetch": "node --env-file=.env.local scripts/fetch-netlas-openclaw.mjs"
+    "netlas:fetch": "node --env-file=.env.local scripts/fetch-netlas-openclaw.mjs",
+    "netlas:validate": "node --env-file=.env.local scripts/validate-netlas-neon.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
@@ -18,6 +19,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
+    "pg": "^8.20.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
