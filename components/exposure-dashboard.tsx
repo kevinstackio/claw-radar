@@ -52,6 +52,16 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                           </p>
                         </div>
                       </div>
+                      {snapshot.note ? (
+                        <div className="mt-3 rounded-md border border-amber-400/50 bg-amber-100/40 px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                            Data Status
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-amber-900 dark:text-amber-100">
+                            {snapshot.note}
+                          </p>
+                        </div>
+                      ) : null}
                     </TabsContent>
 
                     <TabsContent value="notice" className="mt-3 overflow-auto">

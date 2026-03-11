@@ -174,7 +174,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
       {!hasData ? (
         <EmptyState
           title="No chart data"
-          description="Country exposure data has not been generated yet."
+          description={snapshot.note ?? "Country exposure data has not been generated yet."}
         />
       ) : mode === "pie" ? (
         <ChartContainer config={pieChartConfig} className="h-full w-full pt-14">

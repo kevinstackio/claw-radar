@@ -378,21 +378,56 @@ async function loadLatestExposureSnapshotFromLocal(): Promise<ExposureSnapshot> 
 
 async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapshot> {
   const pool = getDatabasePool();
-  const result = await pool.query<DatabasePointRow>(`
-    select
-      host(ip) as ip,
-      coalesce(nullif(country, ''), 'Unknown') as country,
-      latitude,
-      longitude,
-      sum(greatest(seen_count, 1))::int as hit_count,
-      array_remove(array_agg(distinct port order by port), null) as ports,
-      max(last_seen_at) as last_seen_at
-    from netlas_hits
-    where ip is not null
-      and latitude is not null
-      and longitude is not null
-    group by host(ip), coalesce(nullif(country, ''), 'Unknown'), latitude, longitude
-  `);
+  let usedLegacyAggregation = false;
+  let result;
+
+  try {
+    result = await pool.query<DatabasePointRow>(`
+      select
+        host(ip) as ip,
+        coalesce(nullif(country, ''), 'Unknown') as country,
+        latitude,
+        longitude,
+        sum(greatest(seen_count, 1))::int as hit_count,
+        array_remove(array_agg(distinct port order by port), null) as ports,
+        max(last_seen_at) as last_seen_at
+      from netlas_hits
+      where ip is not null
+        and latitude is not null
+        and longitude is not null
+      group by host(ip), coalesce(nullif(country, ''), 'Unknown'), latitude, longitude
+    `);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const isSchemaDrift =
+      /column "seen_count" does not exist/i.test(message) ||
+      /column "last_seen_at" does not exist/i.test(message);
+
+    if (!isSchemaDrift) {
+      throw error;
+    }
+
+    usedLegacyAggregation = true;
+    result = await pool.query<DatabasePointRow>(`
+      select
+        host(ip) as ip,
+        coalesce(nullif(country, ''), 'Unknown') as country,
+        latitude,
+        longitude,
+        count(*)::int as hit_count,
+        array_remove(array_agg(distinct port order by port), null) as ports,
+        null::timestamptz as last_seen_at
+      from netlas_hits
+      where ip is not null
+        and latitude is not null
+        and longitude is not null
+      group by host(ip), coalesce(nullif(country, ''), 'Unknown'), latitude, longitude
+    `);
+  }
+
+  const compatibilityNote = usedLegacyAggregation
+    ? "Database schema is outdated (missing `seen_count` or `last_seen_at`). Compatibility mode is active; run `pnpm netlas:validate` to migrate schema."
+    : null;
 
   if (result.rowCount === 0) {
     return {
@@ -403,7 +438,9 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       plottedPoints: 0,
       countries: [],
       points: [],
-      note: "No records found in database table `netlas_hits`. Run the Netlas sync job first.",
+      note: compatibilityNote
+        ? `No records found in database table \`netlas_hits\`. Run the Netlas sync job first. ${compatibilityNote}`
+        : "No records found in database table `netlas_hits`. Run the Netlas sync job first.",
     };
   }
 
@@ -470,9 +507,13 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     countries,
     points,
     note:
-      points.length === 0
-        ? "Database records exist, but none are valid public-IP points with coordinates."
-        : null,
+      compatibilityNote && points.length === 0
+        ? `${compatibilityNote} Database records exist, but none are valid public-IP points with coordinates.`
+        : compatibilityNote
+          ? compatibilityNote
+          : points.length === 0
+            ? "Database records exist, but none are valid public-IP points with coordinates."
+            : null,
   };
 }
 
