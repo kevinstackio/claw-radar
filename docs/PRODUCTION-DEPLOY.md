@@ -74,7 +74,7 @@ Recommended baseline:
 
 This repo includes `.github/workflows/netlas-sync.yml`, scheduled at:
 
-- `00:00` Asia/Shanghai (`16:00` UTC)
+- `00:20` Asia/Shanghai (`16:20` UTC)
 
 Required GitHub Actions **Secrets**:
 

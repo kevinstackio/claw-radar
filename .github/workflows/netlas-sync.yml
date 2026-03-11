@@ -2,8 +2,8 @@ name: Netlas Sync
 
 on:
   schedule:
-    # 00:10 Asia/Shanghai = 16:10 UTC (previous day)
-    - cron: "10 16 * * *"
+    # 00:20 Asia/Shanghai = 16:20 UTC (previous day)
+    - cron: "20 16 * * *"
   workflow_dispatch:
 
 permissions:

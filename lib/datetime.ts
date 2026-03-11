@@ -1,6 +1,6 @@
 export function formatSnapshotTimestamp(value?: string | null) {
   if (!value) {
-    return "No backup yet";
+    return "No data yet";
   }
 
   const date = new Date(value);
@@ -14,7 +14,7 @@ export function formatSnapshotTimestamp(value?: string | null) {
 
 export function formatSnapshotDate(value?: string | null) {
   if (!value) {
-    return "No backup yet";
+    return "No data yet";
   }
 
   const date = new Date(value);

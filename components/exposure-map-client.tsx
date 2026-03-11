@@ -4,13 +4,14 @@ import type { CircleMarker as LeafletCircleMarker } from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 
-import { formatSnapshotTimestamp } from "@/lib/datetime";
+import { formatSnapshotDate } from "@/lib/datetime";
 import type { ExposureSnapshot } from "@/lib/exposure-types";
 import {
   IP_SEARCH_EVENT,
   type IpSearchResult,
 } from "@/lib/ip-search";
-import { informationLayout } from "@/lib/ui-information";
+import { informationLayout, informationText } from "@/lib/ui-information";
+import { cn } from "@/lib/utils";
 
 type ExposureMapClientProps = {
   snapshot: ExposureSnapshot;
@@ -96,7 +97,7 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     ? `${matchedPoint.ip}-${matchedPoint.lat}-${matchedPoint.lon}`
     : null;
 
-  const generatedAtLabel = formatSnapshotTimestamp(snapshot.generatedAt);
+  const generatedAtLabel = formatSnapshotDate(snapshot.generatedAt);
 
   useEffect(() => {
     if (!matchedPointKey) {
@@ -158,11 +159,9 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
           );
 
           const popupRows = [
-            { label: "IP", value: point.ip },
             { label: "Country", value: point.country },
             { label: "Records", value: point.count.toString() },
             { label: "Ports", value: point.portSummary || "N/A" },
-            { label: "Coord", value: `${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` },
             { label: "Updated", value: generatedAtLabel },
           ];
 
@@ -185,12 +184,20 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
                 fillOpacity: isSelected ? 0.95 : 0.82,
               }}
             >
-              <Popup>
+              <Popup className="exposure-popup" closeButton={false}>
                 <div className={informationLayout.popupContainer}>
+                  <div className={informationLayout.summaryRow}>
+                    <span className={informationText.rowLabel}>IP</span>
+                    <span className={cn(informationLayout.summaryValueWrap, informationText.rowValue)}>
+                      {point.ip}
+                    </span>
+                  </div>
                   {popupRows.map((row) => (
-                    <div key={row.label} className={informationLayout.popupRow}>
-                      <span className={informationLayout.popupLabel}>{row.label}</span>
-                      <span className={informationLayout.popupValue}>{row.value}</span>
+                    <div key={row.label} className={informationLayout.summaryRow}>
+                      <span className={informationText.rowLabel}>{row.label}</span>
+                      <span className={cn(informationLayout.summaryValueWrap, informationText.rowValue)}>
+                        {row.value}
+                      </span>
                     </div>
                   ))}
                 </div>

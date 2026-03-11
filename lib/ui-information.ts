@@ -16,10 +16,10 @@ export const informationLayout = {
   noticeBlock: "space-y-3",
   sectionTitle: "text-sm font-semibold text-foreground",
   sectionSubtitle: "text-[11px] text-muted-foreground",
-  popupContainer: "flex min-w-[220px] flex-col gap-1.5 p-1",
-  popupRow: "flex items-center justify-between gap-3 rounded-md bg-muted/40 px-2.5 py-1.5",
-  popupLabel: "shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground",
-  popupValue: "max-w-[150px] text-right text-xs font-medium text-foreground break-all",
+  popupContainer: "flex min-w-[248px] flex-col gap-2 p-1",
+  popupRow: "flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2",
+  popupLabel: "text-[11px] uppercase tracking-wide text-muted-foreground",
+  popupValue: "max-w-[58%] truncate text-right text-sm font-medium text-foreground",
 };
 
 export const informationChart = {
