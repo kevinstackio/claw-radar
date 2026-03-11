@@ -1,20 +1,22 @@
-# 文档导航
+# 文档索引
 
-本目录用于沉淀项目规范、开发约定与操作指引。
+这里集中放项目规范、架构设计和运行说明。
 
-## 目录
-- [PROJECT.md](PROJECT.md) 项目说明与技术栈、组件与主题约束。
-- [CODEX-RULES.md](CODEX-RULES.md) Codex 在本仓库执行任务的强制规则。
-- [INFORMATION-HIERARCHY.md](INFORMATION-HIERARCHY.md) 信息披露层级与 Toast 分级规范（强制）。
-- [ECHARTS.md](ECHARTS.md) 图表接入与 shadcn/recharts 协作说明。
-- [FREE-AUTOMATION.md](FREE-AUTOMATION.md) 免费自动化抓取流程说明。
-- [MCP.md](MCP.md) shadcn MCP 使用说明。
-- [SKILLS.md](SKILLS.md) shadcn Skills 使用说明。
+## 文档列表
 
-## 使用建议
-- 新成员先阅读 `PROJECT.md` 与 `CODEX-RULES.md`。
-- 涉及 UI 信息层级、文案优先级、反馈提示时，先看 `INFORMATION-HIERARCHY.md`。
-- 涉及图表或自动化任务时，再阅读对应专项文档。
+- [PROJECT.md](PROJECT.md)：项目概览、技术栈与开发约定。
+- [CODEX-RULES.md](CODEX-RULES.md)：Codex 在本仓库执行任务时的规则。
+- [COMMIT-POLICY.md](COMMIT-POLICY.md)：提交拆分策略与提交信息规范。
+- [INFORMATION-HIERARCHY.md](INFORMATION-HIERARCHY.md)：信息层级与 Toast 级别规范。
+- [FREE-AUTOMATION.md](FREE-AUTOMATION.md)：免费自动化抓取流程说明。
+- [MCP.md](MCP.md)：MCP 使用说明。
+- [SKILLS.md](SKILLS.md)：Skills 使用说明。
+- [NETLAS-GATEWAY-DESIGN.md](NETLAS-GATEWAY-DESIGN.md)：Netlas 多密钥网关与配额调度设计。
+- [NEON-INTEGRATION.md](NEON-INTEGRATION.md)：Neon 在本项目中的接入规范。
+- [NEON-SCHEMA.sql](NEON-SCHEMA.sql)：Neon/Postgres 表结构。
+- [RUN-AND-DEBUG.md](RUN-AND-DEBUG.md)：本地运行、自动排错与无数据排查。
 
-## 约定
-- 包管理器仅允许使用 `pnpm`，不要使用 `npm` 或 `yarn`。
+## 备注
+
+- 本仓库统一使用 `pnpm`。
+- 新同事建议先读 `PROJECT.md`。
