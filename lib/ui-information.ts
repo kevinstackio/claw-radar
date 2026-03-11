@@ -16,10 +16,10 @@ export const informationLayout = {
   noticeBlock: "space-y-3",
   sectionTitle: "text-sm font-semibold text-foreground",
   sectionSubtitle: "text-[11px] text-muted-foreground",
-  popupContainer: "space-y-1.5",
-  popupRow: "flex items-start gap-2",
-  popupLabel: "w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground",
-  popupValue: "text-xs text-foreground",
+  popupContainer: "flex min-w-[220px] flex-col gap-1.5 p-1",
+  popupRow: "flex items-center justify-between gap-3 rounded-md bg-muted/40 px-2.5 py-1.5",
+  popupLabel: "shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground",
+  popupValue: "max-w-[150px] text-right text-xs font-medium text-foreground break-all",
 };
 
 export const informationChart = {
@@ -30,4 +30,3 @@ export const informationChart = {
   pieCenterY: "57%",
   pieOuterRadius: "62%",
 };
-

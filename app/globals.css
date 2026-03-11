@@ -140,3 +140,27 @@ body {
     @apply font-sans;
   }
 }
+
+.leaflet-popup-content-wrapper {
+  border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 10px 28px color-mix(in oklch, black 18%, transparent);
+}
+
+.leaflet-popup-content {
+  margin: 0;
+}
+
+.leaflet-popup-tip {
+  background: var(--popover);
+}
+
+.leaflet-container .leaflet-popup-close-button {
+  color: var(--muted-foreground);
+}
+
+.leaflet-container .leaflet-popup-close-button:hover {
+  color: var(--foreground);
+}
