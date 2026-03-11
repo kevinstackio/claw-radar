@@ -70,19 +70,24 @@ Recommended baseline:
 - Monitor API quota and Netlas key health
 - If a sync fails, keep last known good dashboard data (database fallback behavior handles this)
 
-### Project-level scheduler (GitHub Actions)
+### Project-level scheduler (Vercel Cron)
 
-This repo includes `.github/workflows/netlas-sync.yml`, scheduled at:
+Server-side scheduling and deployment actions are managed on **Vercel only**.
 
-- `00:20` Asia/Shanghai (`16:20` UTC)
+This repo includes `vercel.json`:
 
-Required GitHub Actions **Secrets**:
+- Cron path: `/api/cron/netlas-sync`
+- Schedule: `0 17 * * *` (UTC) = `01:00` Asia/Shanghai
+- Route implementation: `app/api/cron/netlas-sync/route.ts`
+
+Required Vercel **Environment Variables**:
 
 - `DATABASE_URL`
 - `NETLAS_ENCRYPTION_KEY`
 - `NETLAS_API_KEYS` (or `NETLAS_API_KEY`)
+- `CRON_SECRET` (recommended, used by Vercel Cron request auth)
 
-Optional GitHub Actions **Variables**:
+Optional Vercel **Environment Variables**:
 
 - `NETLAS_QUERY`
 - `NETLAS_BASE_URL`
@@ -91,7 +96,7 @@ Optional GitHub Actions **Variables**:
 - `NETLAS_VALIDATION_START`
 - `NETLAS_VALIDATION_MAX_KEYS`
 
-You can also run it manually from GitHub Actions via `workflow_dispatch`.
+`NETLAS_VALIDATION_MAX_KEYS` defaults to `2` (balanced mode).
 
 ## 6) Pre-Go-Live Checklist
 

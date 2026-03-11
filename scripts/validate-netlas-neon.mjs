@@ -2,7 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { createCipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 
 const DEFAULT_BASE_URL = "https://app.netlas.io";
@@ -291,8 +291,7 @@ function normalizeHit(item, index, query, queryHash) {
 }
 
 async function bootstrapSchema(client) {
-  const schemaPath = path.join(process.cwd(), "docs", "NEON-SCHEMA.sql");
-  const schemaSql = await readFile(schemaPath, "utf8");
+  const schemaSql = await readFile(new URL("../docs/NEON-SCHEMA.sql", import.meta.url), "utf8");
   await client.query(schemaSql);
 }
 
@@ -462,7 +461,7 @@ async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
   return "inserted";
 }
 
-async function run() {
+export async function runNetlasValidation(options = {}) {
   const databaseUrl = String(process.env.DATABASE_URL ?? "").trim();
   const encryptionSecret = String(process.env.NETLAS_ENCRYPTION_KEY ?? "").trim();
   const baseUrl = (String(process.env.NETLAS_BASE_URL ?? DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
@@ -472,7 +471,8 @@ async function run() {
     "port:18789";
   const timeoutMs = asInt(process.env.NETLAS_TIMEOUT_MS, 30000);
   const start = asInt(process.env.NETLAS_VALIDATION_START, 0);
-  const maxKeys = asInt(process.env.NETLAS_VALIDATION_MAX_KEYS, 2);
+  const maxKeys = asInt(options.maxKeys ?? process.env.NETLAS_VALIDATION_MAX_KEYS, 2);
+  const runType = String(options.runType ?? "manual").trim() || "manual";
 
   if (!databaseUrl) throw new Error("Missing required env: DATABASE_URL");
   if (!encryptionSecret) throw new Error("Missing required env: NETLAS_ENCRYPTION_KEY");
@@ -491,15 +491,15 @@ async function run() {
     await bootstrapSchema(client);
 
     const queryHash = sha256(query);
-    const jobId = `validation-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    const jobId = `validation-${runType}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
     const syncJobInsert = await client.query(
       `
         insert into netlas_sync_jobs (job_id, run_type, query, query_hash, base_url, final_status, started_at)
-        values ($1, 'manual', $2, $3, $4, 'running', now())
+        values ($1, $2, $3, $4, $5, 'running', now())
         returning id
       `,
-      [jobId, query, queryHash, baseUrl]
+      [jobId, runType, query, queryHash, baseUrl]
     );
 
     const syncJobId = syncJobInsert.rows[0].id;
@@ -672,12 +672,29 @@ async function run() {
     console.log(`Inserted: ${totalInserted}, Updated(existing): ${totalUpdated}`);
     console.log(`Invalid filtered: ${totalInvalid}, Duplicate-in-run filtered: ${totalDuplicateInRun}`);
     console.table(perKeyResults);
+
+    return {
+      syncJobId,
+      jobId,
+      runType,
+      keysTested: keys.length,
+      inserted: totalInserted,
+      updated: totalUpdated,
+      invalidFiltered: totalInvalid,
+      duplicateInRunFiltered: totalDuplicateInRun,
+      finalStatus,
+      perKeyResults,
+    };
   } finally {
     await client.end();
   }
 }
 
-run().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+const isDirectRun = Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1];
+
+if (isDirectRun) {
+  runNetlasValidation({ runType: "manual" }).catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}
