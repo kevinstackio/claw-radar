@@ -70,6 +70,29 @@ Recommended baseline:
 - Monitor API quota and Netlas key health
 - If a sync fails, keep last known good dashboard data (database fallback behavior handles this)
 
+### Project-level scheduler (GitHub Actions)
+
+This repo includes `.github/workflows/netlas-sync.yml`, scheduled at:
+
+- `00:00` Asia/Shanghai (`16:00` UTC)
+
+Required GitHub Actions **Secrets**:
+
+- `DATABASE_URL`
+- `NETLAS_ENCRYPTION_KEY`
+- `NETLAS_API_KEYS` (or `NETLAS_API_KEY`)
+
+Optional GitHub Actions **Variables**:
+
+- `NETLAS_QUERY`
+- `NETLAS_BASE_URL`
+- `NETLAS_TIMEOUT_MS`
+- `NETLAS_VALIDATION_QUERY`
+- `NETLAS_VALIDATION_START`
+- `NETLAS_VALIDATION_MAX_KEYS`
+
+You can also run it manually from GitHub Actions via `workflow_dispatch`.
+
 ## 6) Pre-Go-Live Checklist
 
 - `pnpm lint` passes
