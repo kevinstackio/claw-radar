@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./public/claw-radar-icon.svg" alt="ClawRadar Logo" width="120" />
+</p>
+
 # ClawRadar
 
 ClawRadar 是一个基于 Next.js 的可视化项目，用于展示全球范围内公开暴露的 OpenClaw 实例，并辅助识别潜在安全风险。
