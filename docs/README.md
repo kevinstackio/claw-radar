@@ -20,3 +20,5 @@
 
 - 本仓库统一使用 `pnpm`。
 - 新同事建议先读 `PROJECT.md`。
+
+- [PRODUCTION-DEPLOY.md](PRODUCTION-DEPLOY.md): Production-only deployment and local-vs-production runtime notes.

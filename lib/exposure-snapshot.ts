@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { Pool } from "pg";
 
 import type { CountryExposure, ExposurePoint, ExposureSnapshot } from "@/lib/exposure-types";
 
@@ -7,6 +8,8 @@ type BackupPayload = {
   meta?: { generatedAt?: string };
   hits?: unknown[];
 };
+
+type RuntimeDataSource = "auto" | "local" | "database";
 
 type MutablePoint = {
   ip: string;
@@ -17,7 +20,23 @@ type MutablePoint = {
   ports: Set<number>;
 };
 
+type DatabasePointRow = {
+  ip: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  hit_count: number | string | null;
+  ports: unknown;
+  last_seen_at: string | Date | null;
+};
+
 const BACKUP_DIR = path.join(process.cwd(), "data", "backups", "exposure");
+const DATABASE_SOURCE_FILE = "database:netlas_hits";
+const DEFAULT_DATA_SOURCE: RuntimeDataSource = "auto";
+
+const globalForPg = globalThis as typeof globalThis & {
+  __clawRadarPool?: Pool;
+};
 
 const LATITUDE_PATHS = [
   ["location", "coordinates", "latitude"],
@@ -44,20 +63,9 @@ const COUNTRY_PATHS = [
   ["autonomous_system", "country"],
 ];
 
-const IP_PATHS = [
-  ["ip"],
-  ["ip_address"],
-  ["host", "ip"],
-  ["asset", "ip"],
-  ["name"],
-];
+const IP_PATHS = [["ip"], ["ip_address"], ["host", "ip"], ["asset", "ip"], ["name"]];
 
-const PORT_PATHS = [
-  ["port"],
-  ["services", "0", "port"],
-  ["service", "port"],
-  ["transport", "port"],
-];
+const PORT_PATHS = [["port"], ["services", "0", "port"], ["service", "port"], ["transport", "port"]];
 
 function getValueByPath(value: unknown, pathTokens: string[]): unknown {
   let current: unknown = value;
@@ -161,6 +169,61 @@ function isValidCoordinate(latitude: number, longitude: number): boolean {
   return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
 }
 
+function parseDataSource(value: string | undefined): RuntimeDataSource {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "database") return "database";
+  if (normalized === "local") return "local";
+  return DEFAULT_DATA_SOURCE;
+}
+
+function getDataSourcePriority(): Array<Exclude<RuntimeDataSource, "auto">> {
+  const configured = parseDataSource(process.env.EXPOSURE_DATA_SOURCE);
+  if (configured === "database") return ["database"];
+  if (configured === "local") return ["local"];
+  if (process.env.NODE_ENV === "production") {
+    return ["database", "local"];
+  }
+  return ["local", "database"];
+}
+
+function shouldUseTls(connectionString: string) {
+  return /sslmode=require/i.test(connectionString);
+}
+
+function getDatabasePool() {
+  const connectionString = String(process.env.DATABASE_URL ?? "").trim();
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  if (!globalForPg.__clawRadarPool) {
+    globalForPg.__clawRadarPool = new Pool({
+      connectionString,
+      ssl: shouldUseTls(connectionString) ? { rejectUnauthorized: false } : undefined,
+      max: 3,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+    });
+  }
+
+  return globalForPg.__clawRadarPool;
+}
+
+function normalizePortList(value: unknown): number[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => Number.parseInt(String(item), 10))
+      .filter((item) => Number.isInteger(item) && item > 0 && item <= 65535)
+      .sort((a, b) => a - b);
+  }
+
+  if (typeof value === "string" && value.startsWith("{") && value.endsWith("}")) {
+    return normalizePortList(value.slice(1, -1).split(","));
+  }
+
+  return [];
+}
+
 async function resolveLatestBackupFile(): Promise<string | null> {
   const latestPointer = path.join(BACKUP_DIR, "latest.json");
 
@@ -204,9 +267,7 @@ async function resolveLatestBackupFile(): Promise<string | null> {
 }
 
 function toCountrySeries(countryCounts: Map<string, number>): CountryExposure[] {
-  return [...countryCounts.entries()]
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  return [...countryCounts.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
 function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
@@ -220,7 +281,7 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
   }));
 }
 
-export async function loadLatestExposureSnapshot(): Promise<ExposureSnapshot> {
+async function loadLatestExposureSnapshotFromLocal(): Promise<ExposureSnapshot> {
   const latestFile = await resolveLatestBackupFile();
 
   if (!latestFile) {
@@ -313,4 +374,139 @@ export async function loadLatestExposureSnapshot(): Promise<ExposureSnapshot> {
       note: "Latest backup exists but cannot be parsed. Re-run `pnpm netlas:fetch` to regenerate it.",
     };
   }
+}
+
+async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapshot> {
+  const pool = getDatabasePool();
+  const result = await pool.query<DatabasePointRow>(`
+    select
+      host(ip) as ip,
+      coalesce(nullif(country, ''), 'Unknown') as country,
+      latitude,
+      longitude,
+      sum(greatest(seen_count, 1))::int as hit_count,
+      array_remove(array_agg(distinct port order by port), null) as ports,
+      max(last_seen_at) as last_seen_at
+    from netlas_hits
+    where ip is not null
+      and latitude is not null
+      and longitude is not null
+    group by host(ip), coalesce(nullif(country, ''), 'Unknown'), latitude, longitude
+  `);
+
+  if (result.rowCount === 0) {
+    return {
+      generatedAt: null,
+      sourceFile: DATABASE_SOURCE_FILE,
+      totalRecords: 0,
+      publicRecords: 0,
+      plottedPoints: 0,
+      countries: [],
+      points: [],
+      note: "No records found in database table `netlas_hits`. Run the Netlas sync job first.",
+    };
+  }
+
+  const pointMap = new Map<string, MutablePoint>();
+  const countryCounts = new Map<string, number>();
+  let publicRecords = 0;
+  let generatedAtEpochMs = 0;
+
+  for (const row of result.rows) {
+    const ip = normalizeIp(String(row.ip ?? ""));
+    if (!ip || !isPublicIp(ip)) {
+      continue;
+    }
+
+    const latitude = typeof row.latitude === "number" ? row.latitude : null;
+    const longitude = typeof row.longitude === "number" ? row.longitude : null;
+    if (latitude === null || longitude === null || !isValidCoordinate(latitude, longitude)) {
+      continue;
+    }
+
+    const countRaw = Number.parseInt(String(row.hit_count ?? "1"), 10);
+    const count = Number.isInteger(countRaw) && countRaw > 0 ? countRaw : 1;
+    const country = String(row.country ?? "Unknown").trim() || "Unknown";
+    const ports = normalizePortList(row.ports);
+
+    publicRecords += count;
+    countryCounts.set(country, (countryCounts.get(country) ?? 0) + count);
+
+    const key = `${ip}|${latitude.toFixed(4)}|${longitude.toFixed(4)}`;
+    const existing = pointMap.get(key);
+    if (existing) {
+      existing.count += count;
+      for (const port of ports) {
+        existing.ports.add(port);
+      }
+    } else {
+      pointMap.set(key, {
+        ip,
+        country,
+        latitude,
+        longitude,
+        count,
+        ports: new Set(ports),
+      });
+    }
+
+    if (row.last_seen_at) {
+      const epochMs = new Date(row.last_seen_at).getTime();
+      if (Number.isFinite(epochMs) && epochMs > generatedAtEpochMs) {
+        generatedAtEpochMs = epochMs;
+      }
+    }
+  }
+
+  const points = toPoints(pointMap);
+  const countries = toCountrySeries(countryCounts);
+
+  return {
+    generatedAt: generatedAtEpochMs > 0 ? new Date(generatedAtEpochMs).toISOString() : null,
+    sourceFile: DATABASE_SOURCE_FILE,
+    totalRecords: publicRecords,
+    publicRecords,
+    plottedPoints: points.length,
+    countries,
+    points,
+    note:
+      points.length === 0
+        ? "Database records exist, but none are valid public-IP points with coordinates."
+        : null,
+  };
+}
+
+export async function loadLatestExposureSnapshot(): Promise<ExposureSnapshot> {
+  const priority = getDataSourcePriority();
+  const fallbackReasons: string[] = [];
+
+  for (const source of priority) {
+    try {
+      const snapshot =
+        source === "database"
+          ? await loadLatestExposureSnapshotFromDatabase()
+          : await loadLatestExposureSnapshotFromLocal();
+
+      if (fallbackReasons.length > 0) {
+        const fallbackNote = `Fallback activated (${fallbackReasons.join(" | ")}).`;
+        snapshot.note = snapshot.note ? `${snapshot.note} ${fallbackNote}` : fallbackNote;
+      }
+
+      return snapshot;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      fallbackReasons.push(`${source}: ${message}`);
+    }
+  }
+
+  return {
+    generatedAt: null,
+    sourceFile: null,
+    totalRecords: 0,
+    publicRecords: 0,
+    plottedPoints: 0,
+    countries: [],
+    points: [],
+    note: `Failed to load exposure snapshot from all configured sources. ${fallbackReasons.join(" | ")}`,
+  };
 }
