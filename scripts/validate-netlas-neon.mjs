@@ -4,6 +4,11 @@ import { readFile } from "node:fs/promises";
 import { createCipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import {
+  getDictionaryNumber,
+  getDictionaryString,
+  seedRuntimeDictionary,
+} from "../lib/server/dictionary-store.mjs";
 
 const DEFAULT_BASE_URL = "https://app.netlas.io";
 const SEARCH_PATH = "/api/responses/";
@@ -11,6 +16,12 @@ const SEARCH_PATH = "/api/responses/";
 function asInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseOptionalInt(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function toIsoDate(date = new Date()) {
@@ -463,7 +474,6 @@ async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
 
 export async function runNetlasValidation(options = {}) {
   const databaseUrl = String(process.env.DATABASE_URL ?? "").trim();
-  const encryptionSecret = String(process.env.NETLAS_ENCRYPTION_KEY ?? "").trim();
   const baseUrl = (String(process.env.NETLAS_BASE_URL ?? DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const query =
     String(process.env.NETLAS_VALIDATION_QUERY ?? "").trim() ||
@@ -471,14 +481,10 @@ export async function runNetlasValidation(options = {}) {
     "port:18789";
   const timeoutMs = asInt(process.env.NETLAS_TIMEOUT_MS, 30000);
   const start = asInt(process.env.NETLAS_VALIDATION_START, 0);
-  const maxKeys = asInt(options.maxKeys ?? process.env.NETLAS_VALIDATION_MAX_KEYS, 2);
+  const requestedMaxKeys = parseOptionalInt(options.maxKeys ?? process.env.NETLAS_VALIDATION_MAX_KEYS);
   const runType = String(options.runType ?? "manual").trim() || "manual";
 
   if (!databaseUrl) throw new Error("Missing required env: DATABASE_URL");
-  if (!encryptionSecret) throw new Error("Missing required env: NETLAS_ENCRYPTION_KEY");
-
-  const keys = parseApiKeys().slice(0, maxKeys);
-  if (keys.length === 0) throw new Error("Missing Netlas API keys. Set NETLAS_API_KEYS or NETLAS_API_KEY_1/2.");
 
   const client = new Client({
     connectionString: databaseUrl,
@@ -489,6 +495,21 @@ export async function runNetlasValidation(options = {}) {
 
   try {
     await bootstrapSchema(client);
+    await seedRuntimeDictionary(client);
+
+    const encryptionSecret = String(
+      await getDictionaryString(client, "netlas.secrets.encryption_key", "")
+    ).trim();
+    if (!encryptionSecret) {
+      throw new Error("Dictionary `netlas.secrets.encryption_key` is empty.");
+    }
+
+    const defaultMaxKeys = Math.max(1, asInt(await getDictionaryNumber(client, "netlas.validation.default_max_keys", 2), 2));
+    const maxKeysLimit = Math.max(defaultMaxKeys, asInt(await getDictionaryNumber(client, "netlas.validation.max_keys_limit", 20), 20));
+    const resolvedMaxKeys = Math.min(Math.max(requestedMaxKeys ?? defaultMaxKeys, 1), maxKeysLimit);
+
+    const keys = parseApiKeys().slice(0, resolvedMaxKeys);
+    if (keys.length === 0) throw new Error("Missing Netlas API keys. Set NETLAS_API_KEYS or NETLAS_API_KEY_1/2.");
 
     const queryHash = sha256(query);
     const jobId = `validation-${runType}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -677,6 +698,8 @@ export async function runNetlasValidation(options = {}) {
       syncJobId,
       jobId,
       runType,
+      maxKeysRequested: requestedMaxKeys,
+      maxKeysResolved: resolvedMaxKeys,
       keysTested: keys.length,
       inserted: totalInserted,
       updated: totalUpdated,

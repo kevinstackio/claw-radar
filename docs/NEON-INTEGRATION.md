@@ -29,8 +29,9 @@ Neon 负责存储“可追溯运行状态”，包括：
 
 ```bash
 DATABASE_URL=postgresql://<role>:<password>@<host>/<db>?sslmode=require
-NETLAS_ENCRYPTION_KEY=<32字节密钥，用于 API Key 加密>
 ```
+
+说明：`NETLAS_ENCRYPTION_KEY` 已改为数据库字典配置，路径为 `netlas.secrets.encryption_key`（表：`app_dictionary`）。
 
 ## 4. 表结构分层
 
@@ -43,6 +44,7 @@ NETLAS_ENCRYPTION_KEY=<32字节密钥，用于 API Key 加密>
 - `netlas_snapshots`：本地快照元数据
 - `netlas_key_usage_daily`：日用量
 - `netlas_key_usage_monthly`：月用量
+- `app_dictionary`：通用字典中心（配置、映射、转换）
 
 校准表：
 
@@ -92,7 +94,7 @@ NETLAS_ENCRYPTION_KEY=<32字节密钥，用于 API Key 加密>
 - API Key 仅存密文 `api_key_ciphertext`。
 - 日志中只输出 `key_id`（如 `k1/k2`），不输出明文凭据。
 - 运行账号使用最小权限 DB role。
-- 禁止把 `DATABASE_URL`、`NETLAS_ENCRYPTION_KEY`、真实 key 提交到 Git。
+- 禁止把 `DATABASE_URL`、真实 key 提交到 Git。
 
 ## 9. 兼容性
 
@@ -104,3 +106,4 @@ NETLAS_ENCRYPTION_KEY=<32字节密钥，用于 API Key 加密>
 
 - [NETLAS-GATEWAY-DESIGN.md](./NETLAS-GATEWAY-DESIGN.md)
 - [NEON-SCHEMA.sql](./NEON-SCHEMA.sql)
+- [DICTIONARY-DESIGN.md](./DICTIONARY-DESIGN.md)

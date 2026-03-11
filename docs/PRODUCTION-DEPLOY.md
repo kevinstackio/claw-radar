@@ -30,7 +30,7 @@ For Netlas sync jobs (if run in production):
 - `NETLAS_API_KEYS` (or `NETLAS_API_KEY` / `NETLAS_API_KEY_1..n`)
 - `NETLAS_QUERY`
 - `NETLAS_BASE_URL=https://app.netlas.io`
-- `NETLAS_ENCRYPTION_KEY`
+- Encryption key is read from database dictionary path `netlas.secrets.encryption_key`
 
 ## 3) Production Startup
 
@@ -83,7 +83,6 @@ This repo includes `vercel.json`:
 Required Vercel **Environment Variables**:
 
 - `DATABASE_URL`
-- `NETLAS_ENCRYPTION_KEY`
 - `NETLAS_API_KEYS` (or `NETLAS_API_KEY`)
 - `CRON_SECRET` (recommended, used by Vercel Cron request auth)
 
@@ -97,6 +96,8 @@ Optional Vercel **Environment Variables**:
 - `NETLAS_VALIDATION_MAX_KEYS`
 
 `NETLAS_VALIDATION_MAX_KEYS` defaults to `2` (balanced mode).
+Dictionary values are loaded from `app_dictionary` and seeded from `lib/server/runtime-dictionary.mjs`.
+Dictionary design and conversion API: `docs/DICTIONARY-DESIGN.md`.
 
 ## 6) Pre-Go-Live Checklist
 

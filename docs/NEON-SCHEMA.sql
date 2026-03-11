@@ -228,3 +228,24 @@ create table if not exists netlas_quota_drift_events (
 
 create index if not exists idx_quota_drift_events_key_time on netlas_quota_drift_events (key_id, created_at desc);
 create index if not exists idx_quota_drift_events_severity on netlas_quota_drift_events (severity);
+
+-- 10) 通用字典表（配置与映射中心）
+create table if not exists app_dictionary (
+  id uuid primary key default gen_random_uuid(),
+  dict_path text not null unique,
+  namespace text not null,
+  value_type text not null default 'string',
+  value jsonb not null,
+  description text,
+  is_active boolean not null default true,
+  updated_by text not null default 'system',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table if exists app_dictionary drop constraint if exists chk_app_dictionary_value_type;
+alter table if exists app_dictionary
+  add constraint chk_app_dictionary_value_type
+  check (value_type in ('string', 'number', 'boolean', 'json'));
+
+create index if not exists idx_app_dictionary_namespace_active on app_dictionary (namespace, is_active);
