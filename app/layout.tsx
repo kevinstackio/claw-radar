@@ -51,7 +51,7 @@ export default function RootLayout({
 
   return (
     <html lang="en" className={cn("font-sans", geist.variable)} suppressHydrationWarning>
-      <body className="flex h-dvh flex-col overflow-hidden bg-background pb-2 text-foreground">
+      <body className="flex h-dvh flex-col overflow-hidden bg-background pb-2 text-foreground" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
 
         <header className="shrink-0 border-b border-border bg-background">
