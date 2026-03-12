@@ -15,6 +15,7 @@
 - [NEON-INTEGRATION.md](NEON-INTEGRATION.md)：Neon 在本项目中的接入规范。
 - [NEON-SCHEMA.sql](NEON-SCHEMA.sql)：Neon/Postgres 表结构。
 - [RUN-AND-DEBUG.md](RUN-AND-DEBUG.md)：本地运行、自动排错与无数据排查。
+- [VERCEL-CRON-SETUP.md](VERCEL-CRON-SETUP.md)：Vercel 整点定时、变量配置与排障清单。
 
 ## 备注
 
@@ -26,4 +27,3 @@
 ## Milestone Validation
 - [MILESTONE-VALIDATION.md](MILESTONE-VALIDATION.md): Milestone validation SOP and required report template.
 - [MILESTONE-2026-03-12-hourly-sync.md](MILESTONE-2026-03-12-hourly-sync.md): Stage report for hourly sync milestone.
-

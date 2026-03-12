@@ -2,7 +2,7 @@
 
 This project can run in a **production-only** setup (no test/staging environment).
 
-## 1) Local vs Production Behavior
+## 1) Runtime Behavior
 
 - Dashboard/API currently read from **database only** (`netlas_hits` aggregation).
 - `scripts/fetch-netlas-openclaw.mjs` still writes local backups for manual inspection, but UI path does not consume local files.
@@ -11,7 +11,6 @@ This project can run in a **production-only** setup (no test/staging environment
 
 At minimum:
 
-- `NODE_ENV=production`
 - `DATABASE_URL=postgresql://...` (Neon/Postgres)
 
 For Netlas sync jobs (if run in production):
@@ -95,6 +94,7 @@ Optional Vercel **Environment Variables**:
 `NETLAS_VALIDATION_START_STEP` controls expected page stride for validation pagination; request rows persist observed `page_size` per call for traceability.
 Dictionary values are loaded from `app_dictionary` and seeded from `lib/server/runtime-dictionary.mjs`.
 Dictionary design and conversion API: `docs/DICTIONARY-DESIGN.md`.
+Vercel cron setup and troubleshooting: `docs/VERCEL-CRON-SETUP.md`.
 
 ## 6) Pre-Go-Live Checklist
 

@@ -36,17 +36,13 @@ function resolveCronTimeoutMs(url: URL): number {
 }
 
 function resolveAuthorization(request: Request): { ok: boolean; status: number; error: string | null } {
-  const isProduction = process.env.NODE_ENV === "production";
   const cronSecret = String(process.env.CRON_SECRET ?? "").trim();
   if (!cronSecret) {
-    if (isProduction) {
-      return {
-        ok: false,
-        status: 500,
-        error: "cron_secret_required_in_production",
-      };
-    }
-    return { ok: true, status: 200, error: null };
+    return {
+      ok: false,
+      status: 500,
+      error: "cron_secret_required",
+    };
   }
 
   const expected = `Bearer ${cronSecret}`;
