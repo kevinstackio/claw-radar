@@ -77,7 +77,7 @@ Server-side scheduling and deployment actions are managed on **Vercel only**.
 This repo includes `vercel.json`:
 
 - Cron path: `/api/cron/netlas-sync`
-- Schedule: `30 1 * * *` (UTC) = `09:30` Asia/Shanghai
+- Schedule: `0 * * * *` (UTC) = every hour (Asia/Shanghai, at xx:00)
 - Route implementation: `app/api/cron/netlas-sync/route.ts`
 
 Required Vercel **Environment Variables**:
