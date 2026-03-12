@@ -11,7 +11,7 @@ ClawRadar 是一个基于 Next.js 的可视化项目，用于展示全球范围�
 - 全球暴露点位地图展示（Leaflet）
 - 国家维度暴露分布图（饼图/柱状图切换）
 - 头部 IP 搜索（`POST /api/exposure/search-ip`）
-- 本地快照读取与聚合（从 `data/backups/exposure` 自动加载最新备份）
+- 数据库聚合读取与展示（Neon/Postgres）
 - 主题切换（Light/Dark）
 
 ## 技术栈
@@ -41,7 +41,9 @@ pnpm install
 复制 `.env.example` 到 `.env.local`，至少填写：
 
 ```bash
-NETLAS_API_KEY=你的_key
+DATABASE_URL=postgresql://...
+NETLAS_ENCRYPTION_KEY=你的强随机密钥
+NETLAS_API_KEYS=你的_key1,你的_key2
 NETLAS_QUERY=(http.title:"OpenClaw Control") OR (http.body:"openclaw-app") OR (http.body:"__OPENCLAW_CONTROL_UI_BASE_PATH__")
 NETLAS_BASE_URL=https://app.netlas.io
 NETLAS_MAX_PAGES=10
@@ -50,16 +52,11 @@ NETLAS_TIMEOUT_MS=30000
 NETLAS_INCLUDE_RAW_PAGES=false
 ```
 
-### 4) 抓取最新数据（可选但推荐）
+### 4) 执行同步写库（推荐）
 
 ```bash
-pnpm netlas:fetch
+pnpm netlas:validate
 ```
-
-执行后会生成：
-
-- `data/backups/exposure/YYYY-MM-DD/openclaw-netlas-<timestamp>.json`
-- `data/backups/exposure/latest.json`
 
 ### 5) 启动开发服务
 
@@ -75,9 +72,11 @@ pnpm dev
 - `pnpm build`：构建生产包
 - `pnpm start`：启动生产服务
 - `pnpm lint`：执行代码检查
+- `pnpm test:netlas-core`：执行 Netlas 同步核心逻辑单测（planner/usage/dedupe）
 - `pnpm format:check`：格式规则检查（基于 ESLint）
 - `pnpm verify`：完整校验（format + lint + build）
 - `pnpm netlas:fetch`：调用 Netlas API 拉取并落盘本地快照
+- `pnpm netlas:validate`：执行 Netlas 同步并写入 Neon
 
 ## Git Hook（推荐）
 
@@ -94,8 +93,8 @@ git config core.hooksPath .githooks
 
 ## 数据流说明
 
-1. `scripts/fetch-netlas-openclaw.mjs` 从 Netlas API 拉取数据并写入本地备份。
-2. `lib/exposure-snapshot.ts` 在服务端读取 `latest.json` 指向的最新快照，完成清洗、去重、国家聚合与地图点位转换。
+1. `scripts/validate-netlas-neon.mjs` 从 Netlas API 拉取数据并写入 Neon。
+2. `lib/exposure-snapshot.ts` 在服务端读取 `netlas_hits` 聚合结果，完成清洗、国家聚合与地图点位转换。
 3. 首页 `app/page.tsx` 将快照传入仪表盘组件，地图和图表共享同一份快照数据。
 4. IP 搜索通过 `POST /api/exposure/search-ip` 在当前快照中匹配，前端收到结果后触发地图定位与高亮。
 
@@ -127,7 +126,7 @@ lib/                    数据处理与通用方法
 scripts/                本地脚本（如 Netlas 抓取）
 docs/                   项目规范与专项文档
 public/                 静态资源
-data/backups/exposure/  本地快照（默认被 .gitignore 忽略）
+data/backups/exposure/  可选本地备份（默认被 .gitignore 忽略）
 ```
 
 ## 文档导航

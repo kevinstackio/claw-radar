@@ -36,7 +36,7 @@ pnpm netlas:fetch
 - 备份文件：`data/backups/exposure/YYYY-MM-DD/openclaw-netlas-<timestamp>.json`
 - 最新索引：`data/backups/exposure/latest.json`
 
-地图会自动读取 `latest.json` 对应的备份并打点。
+这些文件用于本地离线核对；线上仪表盘读数据库聚合结果。
 
 ## 3. 48 小时定时执行（macOS）
 

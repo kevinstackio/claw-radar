@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:netlas-core": "node --test test/netlas-sync-core.test.mjs",
     "format:check": "eslint . --fix-dry-run --max-warnings=0",
     "verify": "pnpm format:check && pnpm lint && pnpm build",
     "netlas:fetch": "node --env-file=.env.local scripts/fetch-netlas-openclaw.mjs",

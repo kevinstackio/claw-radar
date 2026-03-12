@@ -23,15 +23,16 @@ Neon 负责存储“可追溯运行状态”，包括：
 - 命中记录（结构化字段 + 原始 `raw_hit`）
 - 额度校准快照与漂移记录
 
-本地快照文件（`data/backups/exposure/...`）保留，用于现有仪表盘兼容。
+本地快照文件（`data/backups/exposure/...`）可保留用于离线核对；当前仪表盘在线路径走数据库聚合。
 
 ## 3. 必要环境变量
 
 ```bash
 DATABASE_URL=postgresql://<role>:<password>@<host>/<db>?sslmode=require
+NETLAS_ENCRYPTION_KEY=<strong-random-secret>
 ```
 
-说明：`NETLAS_ENCRYPTION_KEY` 已改为数据库字典配置，路径为 `netlas.secrets.encryption_key`（表：`app_dictionary`）。
+说明：`NETLAS_ENCRYPTION_KEY` 由环境变量提供，不落库明文。
 
 ## 4. 表结构分层
 
@@ -92,7 +93,7 @@ DATABASE_URL=postgresql://<role>:<password>@<host>/<db>?sslmode=require
 ## 8. 安全要求
 
 - API Key 仅存密文 `api_key_ciphertext`。
-- 日志中只输出 `key_id`（如 `k1/k2`），不输出明文凭据。
+- 日志中只输出 `key_id`（如 `kf_ab12cd34...`），不输出明文凭据。
 - 运行账号使用最小权限 DB role。
 - 禁止把 `DATABASE_URL`、真实 key 提交到 Git。
 
@@ -100,7 +101,7 @@ DATABASE_URL=postgresql://<role>:<password>@<host>/<db>?sslmode=require
 
 - 单 key 模式继续可用。
 - 配置一把 key 时，调度器退化为单 key 固定策略。
-- 现有本地快照读取与前端展示链路不需要改动。
+- 前端展示链路读取数据库聚合结果，不依赖本地快照文件。
 
 ## 10. 关联文档
 

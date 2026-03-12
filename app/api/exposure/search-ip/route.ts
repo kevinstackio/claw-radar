@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json<IpSearchResult>({
         status: "not_found",
         ip,
-        message: `未匹配到 IP ${ip}，本地快照中没有该记录。`,
+        message: `未匹配到 IP ${ip}，当前数据库快照中没有该记录。`,
         point: null,
       });
     }

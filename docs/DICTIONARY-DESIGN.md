@@ -2,13 +2,13 @@
 
 ## 1. 目标
 
-统一管理服务端运行字典（配置、阈值、密钥路径、映射规则），避免散落在环境变量和硬编码中。
+统一管理服务端运行字典（配置、阈值、映射规则），避免散落在环境变量和硬编码中。
 
 ## 2. 数据表
 
 表名：`app_dictionary`
 
-- `dict_path`：字典路径（唯一），如 `netlas.secrets.encryption_key`
+- `dict_path`：字典路径（唯一），如 `netlas.validation.default_max_keys`
 - `namespace`：路径一级命名空间（如 `netlas`）
 - `value_type`：`string | number | boolean | json`
 - `value`：`jsonb` 值（统一存储）
@@ -47,7 +47,6 @@ DDL 已落在：
 
 当前默认路径：
 
-- `netlas.secrets.encryption_key`
 - `netlas.validation.default_max_keys`
 - `netlas.validation.max_keys_limit`
 - `netlas.cron.default_max_keys`
@@ -63,11 +62,10 @@ DDL 已落在：
 
 1. `bootstrapSchema` 创建表结构
 2. `seedRuntimeDictionary` 补齐默认字典
-3. 读取 `netlas.secrets.encryption_key` 用于 API Key 密文写库
-4. 读取 `netlas.validation.*` 做 `max_keys` 解析和边界收敛
+3. 读取 `netlas.validation.*` 做 `max_keys` 解析和边界收敛
 
 ## 6. 建议约束
 
-- 禁止删除 `netlas.secrets.encryption_key`，可轮换值但需评估历史密文兼容
+- `NETLAS_ENCRYPTION_KEY` 统一由环境变量注入，禁止硬编码到仓库。
 - 数值类字典统一走 `getDictionaryNumber`，禁止直接字符串转数值
 - 对外部输入路径先走 `normalizeDictionaryPath` 规范化

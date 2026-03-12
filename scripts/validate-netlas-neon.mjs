@@ -6,9 +6,14 @@ import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import {
   getDictionaryNumber,
-  getDictionaryString,
   seedRuntimeDictionary,
 } from "../lib/server/dictionary-store.mjs";
+import {
+  computeRemainingHourlyRuns,
+  computeUsageDelta,
+  createRunDeduper,
+  planRequestsForRun,
+} from "../lib/server/netlas-sync-core.mjs";
 
 const DEFAULT_BASE_URL = "https://app.netlas.io";
 const DEFAULT_OPENCLAW_QUERY = "(http.title:\"OpenClaw Control\") OR (http.body:\"openclaw-app\") OR (http.body:\"__OPENCLAW_CONTROL_UI_BASE_PATH__\")";
@@ -307,8 +312,32 @@ async function bootstrapSchema(client) {
   await client.query(schemaSql);
 }
 
-async function upsertKey(client, keyId, apiKey, encryptedApiKey) {
+async function resolveKeyIdentity(client, apiKey) {
   const fingerprint = sha256(apiKey).slice(0, 16);
+  const existing = await client.query(
+    `
+      select key_id
+      from netlas_keys
+      where key_fingerprint = $1
+      limit 1
+    `,
+    [fingerprint]
+  );
+
+  if (existing.rowCount > 0) {
+    return {
+      keyId: String(existing.rows[0].key_id),
+      fingerprint,
+    };
+  }
+
+  return {
+    keyId: `kf_${fingerprint}`,
+    fingerprint,
+  };
+}
+
+async function upsertKey(client, keyId, fingerprint, encryptedApiKey) {
   await client.query(
     `
       insert into netlas_keys (key_id, key_fingerprint, api_key_ciphertext, is_active, state, updated_at)
@@ -324,11 +353,11 @@ async function upsertKey(client, keyId, apiKey, encryptedApiKey) {
   );
 }
 
-async function bumpUsage(client, keyId, status) {
+async function bumpUsage(client, keyId, usageDelta) {
   const usageDate = toIsoDate();
   const usageMonth = toMonthDate();
-  const requestsInc = status === "ok" ? 1 : 0;
-  const unknownInc = status === "unknown" ? 1 : 0;
+  const requestsInc = Math.max(0, asInt(usageDelta?.usedRequests, 0));
+  const unknownInc = Math.max(0, asInt(usageDelta?.unknownPending, 0));
 
   await client.query(
     `
@@ -357,6 +386,69 @@ async function bumpUsage(client, keyId, status) {
 }
 
 async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
+  const insertResult = await client.query(
+    `
+      insert into netlas_hits (
+        sync_job_id,
+        request_id,
+        key_id,
+        provider,
+        query,
+        query_hash,
+        netlas_item_index,
+        netlas_item_id,
+        hit_hash,
+        asset_key,
+        ip,
+        port,
+        transport,
+        protocol,
+        country,
+        country_code,
+        city,
+        latitude,
+        longitude,
+        observed_at,
+        first_seen_at,
+        last_seen_at,
+        seen_count,
+        raw_hit
+      )
+      values (
+        $1, $2, $3, 'netlas', $4, $5, $6, $7, $8, $9,
+        $10::inet, $11, $12, $13, $14, $15, $16, $17, $18, $19, now(), now(), 1, $20
+      )
+      on conflict (hit_hash) where hit_hash is not null
+      do nothing
+      returning id
+    `,
+    [
+      syncJobId,
+      requestId,
+      keyId,
+      hit.query,
+      hit.queryHash,
+      hit.netlasItemIndex,
+      hit.netlasItemId,
+      hit.assetKey,
+      hit.ip,
+      hit.port,
+      hit.transport,
+      hit.protocol,
+      hit.country,
+      hit.countryCode,
+      hit.city,
+      hit.latitude,
+      hit.longitude,
+      hit.observedAt,
+      hit.rawHit,
+    ]
+  );
+
+  if (insertResult.rowCount > 0) {
+    return "inserted";
+  }
+
   const updateResult = await client.query(
     `
       update netlas_hits
@@ -394,6 +486,7 @@ async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
       hit.queryHash,
       hit.netlasItemIndex,
       hit.netlasItemId,
+      hit.hitHash,
       hit.assetKey,
       hit.ip,
       hit.port,
@@ -413,69 +506,7 @@ async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
     return "updated";
   }
 
-  await client.query(
-    `
-      insert into netlas_hits (
-        sync_job_id,
-        request_id,
-        key_id,
-        provider,
-        query,
-        query_hash,
-        netlas_item_index,
-        netlas_item_id,
-        hit_hash,
-        asset_key,
-        ip,
-        port,
-        transport,
-        protocol,
-        country,
-        country_code,
-        city,
-        latitude,
-        longitude,
-        observed_at,
-        first_seen_at,
-        last_seen_at,
-        seen_count,
-        raw_hit
-      )
-      values (
-        $1, $2, $3, 'netlas', $4, $5, $6, $7, $8, $9,
-        $10::inet, $11, $12, $13, $14, $15, $16, $17, $18, $19, now(), now(), 1, $20
-      )
-    `,
-    [
-      syncJobId,
-      requestId,
-      keyId,
-      hit.query,
-      hit.queryHash,
-      hit.netlasItemIndex,
-      hit.netlasItemId,
-      hit.hitHash,
-      hit.assetKey,
-      hit.ip,
-      hit.port,
-      hit.transport,
-      hit.protocol,
-      hit.country,
-      hit.countryCode,
-      hit.city,
-      hit.latitude,
-      hit.longitude,
-      hit.observedAt,
-      hit.rawHit,
-    ]
-  );
-
-  return "inserted";
-}
-
-function computeRemainingHourlyRuns(now = new Date()) {
-  const currentHourUtc = now.getUTCHours();
-  return Math.max(1, 24 - currentHourUtc);
+  throw new Error(`Failed to upsert netlas hit for hash ${hit.hitHash}.`);
 }
 
 async function loadTodayUsageByKey(client, keyIds) {
@@ -504,10 +535,10 @@ export async function runNetlasValidation(options = {}) {
   const databaseUrl = String(process.env.DATABASE_URL ?? "").trim();
   const baseUrl = (String(process.env.NETLAS_BASE_URL ?? DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const query = String(process.env.NETLAS_QUERY ?? "").trim() || DEFAULT_OPENCLAW_QUERY;
-  const timeoutMs = asInt(process.env.NETLAS_TIMEOUT_MS, 30000);
+  const timeoutMs = asInt(options.timeoutMs ?? process.env.NETLAS_TIMEOUT_MS, 30000);
   const start = asInt(process.env.NETLAS_VALIDATION_START, 0);
   const startStep = asInt(process.env.NETLAS_VALIDATION_START_STEP ?? process.env.NETLAS_START_STEP, 20);
-  const maxPages = asInt(process.env.NETLAS_VALIDATION_MAX_PAGES ?? process.env.NETLAS_MAX_PAGES, 10);
+  const maxPages = asInt(options.maxPages ?? process.env.NETLAS_VALIDATION_MAX_PAGES ?? process.env.NETLAS_MAX_PAGES, 10);
   const dailyRequestBudgetPerKey = asInt(process.env.NETLAS_DAILY_REQUEST_BUDGET_PER_KEY, 50);
   const requestedMaxKeys = parseOptionalInt(options.maxKeys ?? process.env.NETLAS_VALIDATION_MAX_KEYS);
   const runType = String(options.runType ?? "manual").trim() || "manual";
@@ -534,9 +565,9 @@ export async function runNetlasValidation(options = {}) {
     await bootstrapSchema(client);
     await seedRuntimeDictionary(client);
 
-    const encryptionSecret = String(await getDictionaryString(client, "netlas.secrets.encryption_key", "")).trim();
+    const encryptionSecret = String(process.env.NETLAS_ENCRYPTION_KEY ?? "").trim();
     if (!encryptionSecret) {
-      throw new Error("Dictionary `netlas.secrets.encryption_key` is empty.");
+      throw new Error("Missing required env: NETLAS_ENCRYPTION_KEY");
     }
 
     const allKeys = parseApiKeys();
@@ -567,9 +598,9 @@ export async function runNetlasValidation(options = {}) {
     const keyPool = [];
     for (let i = 0; i < keys.length; i += 1) {
       const apiKey = keys[i];
-      const keyId = `k${i + 1}`;
+      const { keyId, fingerprint } = await resolveKeyIdentity(client, apiKey);
       const encryptedApiKey = encryptApiKey(apiKey, encryptionSecret);
-      await upsertKey(client, keyId, apiKey, encryptedApiKey);
+      await upsertKey(client, keyId, fingerprint, encryptedApiKey);
 
       keyPool.push({
         keyId,
@@ -601,9 +632,11 @@ export async function runNetlasValidation(options = {}) {
 
     const totalRemainingBudget = keyPool.reduce((acc, key) => acc + key.remainingToday, 0);
     const remainingRunsToday = computeRemainingHourlyRuns(new Date());
-    const targetRequestsThisRun =
-      totalRemainingBudget > 0 ? Math.max(1, Math.ceil(totalRemainingBudget / remainingRunsToday)) : 0;
-    const plannedRequestsThisRun = Math.min(maxPages, targetRequestsThisRun, totalRemainingBudget);
+    const { plannedRequestsThisRun } = planRequestsForRun({
+      totalRemainingBudget,
+      remainingRunsToday,
+      maxPages,
+    });
 
     let totalInserted = 0;
     let totalUpdated = 0;
@@ -617,6 +650,7 @@ export async function runNetlasValidation(options = {}) {
     let observedPageSize = null;
 
     let roundRobinCursor = 0;
+    const runDeduper = createRunDeduper();
 
     for (let requestIndex = 0; requestIndex < plannedRequestsThisRun; requestIndex += 1) {
       let selectedKey = null;
@@ -651,6 +685,8 @@ export async function runNetlasValidation(options = {}) {
       selectedKey.lastStatus = result.status;
       selectedKey.lastHttpStatus = result.httpStatus;
       selectedKey.lastErrorCode = result.errorCode;
+      const usageDelta = computeUsageDelta(result);
+      const pageSize = result.status === "ok" ? result.items.length : null;
 
       const responseBodyText =
         typeof result.responseBodyText === "string" && result.responseBodyText.length > 120000
@@ -666,8 +702,8 @@ export async function runNetlasValidation(options = {}) {
             response_headers, response_body, response_body_text, started_at, finished_at
           )
           values (
-            $1, $2, $3, $4, $5, $6, $7, null, $8, $9, $10,
-            $11, $12, $13, null, $14, $15, $16, $17, $18
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+            $12, $13, $14, null, $15, $16, $17, $18, $19
           )
         `,
         [
@@ -678,6 +714,7 @@ export async function runNetlasValidation(options = {}) {
           query,
           queryHash,
           startOffset,
+          pageSize,
           result.status,
           result.httpStatus,
           result.retryAfter,
@@ -692,7 +729,9 @@ export async function runNetlasValidation(options = {}) {
         ]
       );
 
-      await bumpUsage(client, selectedKey.keyId, result.status);
+      await bumpUsage(client, selectedKey.keyId, usageDelta);
+      selectedKey.usedToday += usageDelta.usedRequests;
+      selectedKey.remainingToday = Math.max(0, selectedKey.remainingToday - usageDelta.usedRequests);
 
       if (result.status !== "ok") {
         failedCount += 1;
@@ -727,7 +766,6 @@ export async function runNetlasValidation(options = {}) {
       }
 
       okCount += 1;
-      selectedKey.remainingToday = Math.max(0, selectedKey.remainingToday - 1);
 
       await client.query(
         `
@@ -738,8 +776,6 @@ export async function runNetlasValidation(options = {}) {
         [selectedKey.keyId]
       );
 
-      const seenInRequest = new Set();
-
       for (let index = 0; index < result.items.length; index += 1) {
         const normalized = normalizeHit(result.items[index], index, query, queryHash);
         if (!normalized.valid) {
@@ -749,12 +785,11 @@ export async function runNetlasValidation(options = {}) {
         }
 
         const hit = normalized.hit;
-        if (seenInRequest.has(hit.hitHash)) {
+        if (!runDeduper.addIfNew(hit.hitHash)) {
           selectedKey.duplicateInRun += 1;
           totalDuplicateInRun += 1;
           continue;
         }
-        seenInRequest.add(hit.hitHash);
 
         const action = await upsertHitRecord(client, { syncJobId, requestId, keyId: selectedKey.keyId, hit });
         if (action === "inserted") {
@@ -875,4 +910,3 @@ if (isDirectRun) {
     process.exit(1);
   });
 }
-

@@ -21,46 +21,35 @@
 
 ## 本地无数据的核心原因
 
-当前页面默认读取本地快照文件：
+当前页面读取数据库聚合（`netlas_hits`），常见无数据原因：
 
-- `data/backups/exposure/latest.json`
-
-如果这个文件不存在，页面就会显示无数据。
-
-注意：
-
-- 现在把数据写入 Neon，不会自动让前端显示。
-- 现有前端仍然依赖本地快照文件。
+- `DATABASE_URL` 配置错误或连接失败。
+- 从未执行过同步任务（表存在但没有命中数据）。
+- 同步任务失败（可在 `netlas_sync_jobs` / `netlas_requests` 查看状态）。
 
 ## 恢复数据展示
 
-1. 在 `.env.local` 配置可用 key：
+1. 在 `.env.local` 配置必要变量：
 
 ```bash
-NETLAS_API_KEY=...
-# 或
 NETLAS_API_KEYS=key1,key2
-# 或
-NETLAS_API_KEY_1=...
-NETLAS_API_KEY_2=...
+DATABASE_URL=postgresql://...
+NETLAS_ENCRYPTION_KEY=...
 ```
 
-2. 执行抓取：
+2. 执行写库同步：
 
 ```bash
-pnpm netlas:fetch
+pnpm netlas:validate
 ```
 
-3. 生成以下文件后刷新页面：
-
-- `data/backups/exposure/YYYY-MM-DD/openclaw-netlas-<timestamp>.json`
-- `data/backups/exposure/latest.json`
+3. 刷新页面确认地图与图表是否有数据。
 
 ## 常用命令
 
 - 本地预览：`pnpm dev`
 - 本地抓取：`pnpm netlas:fetch`
-- Neon 写库验证：`pnpm netlas:validate`
+- Neon 写库同步：`pnpm netlas:validate`
 
 
 ## 抓取调优参数（节约请求）

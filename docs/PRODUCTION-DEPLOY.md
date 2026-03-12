@@ -4,25 +4,14 @@ This project can run in a **production-only** setup (no test/staging environment
 
 ## 1) Local vs Production Behavior
 
-- Local debug (`NODE_ENV=development` + `EXPOSURE_DATA_SOURCE=auto`):
-  - Priority: local backup files -> database
-  - Useful for fast iteration without mandatory cloud dependencies
-- Production (`NODE_ENV=production` + `EXPOSURE_DATA_SOURCE=auto`):
-  - Priority: database -> local backup files
-  - Prevents production from silently depending on local debug files
-
-Data source override:
-
-- `EXPOSURE_DATA_SOURCE=database`: force database only
-- `EXPOSURE_DATA_SOURCE=local`: force local file only
-- `EXPOSURE_DATA_SOURCE=auto`: environment-aware fallback order (recommended)
+- Dashboard/API currently read from **database only** (`netlas_hits` aggregation).
+- `scripts/fetch-netlas-openclaw.mjs` still writes local backups for manual inspection, but UI path does not consume local files.
 
 ## 2) Required Production Environment Variables
 
 At minimum:
 
 - `NODE_ENV=production`
-- `EXPOSURE_DATA_SOURCE=database`
 - `DATABASE_URL=postgresql://...` (Neon/Postgres)
 
 For Netlas sync jobs (if run in production):
@@ -30,7 +19,7 @@ For Netlas sync jobs (if run in production):
 - `NETLAS_API_KEYS` (or `NETLAS_API_KEY` / `NETLAS_API_KEY_1..n`)
 - `NETLAS_QUERY`
 - `NETLAS_BASE_URL=https://app.netlas.io`
-- Encryption key is read from database dictionary path `netlas.secrets.encryption_key`
+- `NETLAS_ENCRYPTION_KEY` (required, used to encrypt key material before storing into DB)
 
 ## 3) Production Startup
 
@@ -66,7 +55,8 @@ Without a staging environment, run scheduled sync directly against production.
 
 Recommended baseline:
 
-- Keep a low frequency (for example every 24-48 hours)
+- Keep top-of-hour execution (`0 * * * *` UTC, hourly)
+- Control daily cost through `NETLAS_VALIDATION_MAX_KEYS`, `NETLAS_VALIDATION_MAX_PAGES`, and `NETLAS_DAILY_REQUEST_BUDGET_PER_KEY`
 - Monitor API quota and Netlas key health
 - If a sync fails, keep last known good dashboard data (database fallback behavior handles this)
 
@@ -84,7 +74,8 @@ Required Vercel **Environment Variables**:
 
 - `DATABASE_URL`
 - `NETLAS_API_KEYS` (or `NETLAS_API_KEY`)
-- `CRON_SECRET` (recommended, used by Vercel Cron request auth)
+- `NETLAS_ENCRYPTION_KEY`
+- `CRON_SECRET` (required in production, used by `/api/cron/netlas-sync` request auth)
 
 Optional Vercel **Environment Variables**:
 
@@ -92,11 +83,16 @@ Optional Vercel **Environment Variables**:
 - `NETLAS_BASE_URL`
 - `NETLAS_TIMEOUT_MS`
 - `NETLAS_VALIDATION_START`
+- `NETLAS_VALIDATION_START_STEP` (fallback to `NETLAS_START_STEP` when empty)
 - `NETLAS_VALIDATION_MAX_KEYS`
 - `NETLAS_VALIDATION_MAX_PAGES`
 - `NETLAS_DAILY_REQUEST_BUDGET_PER_KEY`
+- `NETLAS_CRON_MAX_KEYS` (default `2`)
+- `NETLAS_CRON_MAX_PAGES` (default `3`)
+- `NETLAS_CRON_TIMEOUT_MS` (default `12000`)
 
 `NETLAS_VALIDATION_MAX_KEYS` defaults to `2` (balanced mode).
+`NETLAS_VALIDATION_START_STEP` controls expected page stride for validation pagination; request rows persist observed `page_size` per call for traceability.
 Dictionary values are loaded from `app_dictionary` and seeded from `lib/server/runtime-dictionary.mjs`.
 Dictionary design and conversion API: `docs/DICTIONARY-DESIGN.md`.
 
@@ -105,17 +101,15 @@ Dictionary design and conversion API: `docs/DICTIONARY-DESIGN.md`.
 - `pnpm lint` passes
 - `pnpm build` passes
 - `DATABASE_URL` is reachable from production host
-- `EXPOSURE_DATA_SOURCE=database` is set in production
 - Home page renders data and `/api/exposure/search-ip` returns expected statuses
 
 ## 7) Rollback Strategy
 
 If production database access becomes unavailable:
 
-1. Temporarily switch to `EXPOSURE_DATA_SOURCE=local`
-2. Keep serving last valid local snapshot
-3. Restore database connectivity
-4. Switch back to `EXPOSURE_DATA_SOURCE=database`
+1. Pause scheduled sync.
+2. Restore database connectivity.
+3. Re-run `pnpm netlas:validate` once (if schema drift is suspected).
+4. Re-enable scheduled sync.
 
 Use this only as a temporary emergency path.
-
