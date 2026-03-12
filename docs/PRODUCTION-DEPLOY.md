@@ -54,7 +54,7 @@ Without a staging environment, run scheduled sync directly against production.
 
 Recommended baseline:
 
-- Keep stable execution cadence (current workflow default: `30 * * * *` UTC, hourly at `:30`)
+- Keep stable execution cadence (current workflow default: `0 * * * *` UTC, hourly at top-of-hour)
 - Control daily cost through `NETLAS_VALIDATION_MAX_KEYS`, `NETLAS_VALIDATION_MAX_PAGES`, and `NETLAS_DAILY_REQUEST_BUDGET_PER_KEY`
 - Monitor API quota and Netlas key health
 - If a sync fails, keep last known good dashboard data (database fallback behavior handles this)
@@ -66,7 +66,7 @@ Server-side scheduling is managed by **GitHub Actions schedule**.
 Workflow file:
 
 - `.github/workflows/netlas-sync-schedule.yml`
-- Calls `/api/cron/netlas-sync` on production URL every hour at minute `30` (UTC)
+- Calls `/api/cron/netlas-sync` on production URL every top-of-hour (UTC)
 
 Required Vercel **Environment Variables**:
 
@@ -79,6 +79,17 @@ Required GitHub **Repository Secrets**:
 
 - `CRON_ENDPOINT_URL` (example: `https://<your-production-domain>/api/cron/netlas-sync`)
 - `CRON_SECRET` (must match Vercel `CRON_SECRET`)
+
+Critical configuration snapshot:
+
+- Vercel Production env:
+  - `DATABASE_URL`
+  - `NETLAS_API_KEYS`
+  - `NETLAS_ENCRYPTION_KEY`
+  - `CRON_SECRET`
+- GitHub Actions secrets:
+  - `CRON_ENDPOINT_URL`
+  - `CRON_SECRET` (same value as Vercel)
 
 Optional Vercel **Environment Variables**:
 

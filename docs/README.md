@@ -4,6 +4,7 @@
 
 ## 文档列表
 
+- [CRITICAL-CONFIG.md](CRITICAL-CONFIG.md)：生产关键配置总览（必配项、验收清单、报错对照）。
 - [PROJECT.md](PROJECT.md)：项目概览、技术栈与开发约定。
 - [CODEX-RULES.md](CODEX-RULES.md)：Codex 在本仓库执行任务时的规则。
 - [COMMIT-POLICY.md](COMMIT-POLICY.md)：提交拆分策略与提交信息规范。
@@ -21,6 +22,7 @@
 
 - 本仓库统一使用 `pnpm`。
 - 新同事建议先读 `PROJECT.md`。
+- 生产定时相关变量优先看 `GITHUB-CRON-SETUP.md` 的“必配项总表”。
 
 - [PRODUCTION-DEPLOY.md](PRODUCTION-DEPLOY.md): Production-only deployment and local-vs-production runtime notes.
 

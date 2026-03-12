@@ -133,6 +133,7 @@ data/backups/exposure/  可选本地备份（默认被 .gitignore 忽略）
 
 更多项目规范与说明见 [`docs/README.md`](docs/README.md)：
 
+- `docs/CRITICAL-CONFIG.md`：生产关键配置总览（优先看）。
 - `docs/PROJECT.md`：项目说明、技术栈、开发约束
 - `docs/CODEX-RULES.md`：仓库内执行规则
 - `docs/FREE-AUTOMATION.md`：免费自动化抓取方案（Netlas）
