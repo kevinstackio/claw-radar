@@ -83,7 +83,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      trigger: "vercel-cron",
+      trigger: "external-cron",
       maxKeysRequested: maxKeys ?? null,
       maxPages,
       timeoutMs,

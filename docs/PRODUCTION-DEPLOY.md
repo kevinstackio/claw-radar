@@ -54,20 +54,19 @@ Without a staging environment, run scheduled sync directly against production.
 
 Recommended baseline:
 
-- Keep top-of-hour execution (`0 * * * *` UTC, hourly)
+- Keep stable execution cadence (current workflow default: `30 * * * *` UTC, hourly at `:30`)
 - Control daily cost through `NETLAS_VALIDATION_MAX_KEYS`, `NETLAS_VALIDATION_MAX_PAGES`, and `NETLAS_DAILY_REQUEST_BUDGET_PER_KEY`
 - Monitor API quota and Netlas key health
 - If a sync fails, keep last known good dashboard data (database fallback behavior handles this)
 
-### Project-level scheduler (Vercel Cron)
+### Project-level scheduler (GitHub Actions)
 
-Server-side scheduling and deployment actions are managed on **Vercel only**.
+Server-side scheduling is managed by **GitHub Actions schedule**.
 
-This repo includes `vercel.json`:
+Workflow file:
 
-- Cron path: `/api/cron/netlas-sync`
-- Schedule: `0 * * * *` (UTC) = every hour (Asia/Shanghai, at xx:00)
-- Route implementation: `app/api/cron/netlas-sync/route.ts`
+- `.github/workflows/netlas-sync-schedule.yml`
+- Calls `/api/cron/netlas-sync` on production URL every hour at minute `30` (UTC)
 
 Required Vercel **Environment Variables**:
 
@@ -75,6 +74,11 @@ Required Vercel **Environment Variables**:
 - `NETLAS_API_KEYS` (or `NETLAS_API_KEY`)
 - `NETLAS_ENCRYPTION_KEY`
 - `CRON_SECRET` (required in production, used by `/api/cron/netlas-sync` request auth)
+
+Required GitHub **Repository Secrets**:
+
+- `CRON_ENDPOINT_URL` (example: `https://<your-production-domain>/api/cron/netlas-sync`)
+- `CRON_SECRET` (must match Vercel `CRON_SECRET`)
 
 Optional Vercel **Environment Variables**:
 
@@ -94,7 +98,7 @@ Optional Vercel **Environment Variables**:
 `NETLAS_VALIDATION_START_STEP` controls expected page stride for validation pagination; request rows persist observed `page_size` per call for traceability.
 Dictionary values are loaded from `app_dictionary` and seeded from `lib/server/runtime-dictionary.mjs`.
 Dictionary design and conversion API: `docs/DICTIONARY-DESIGN.md`.
-Vercel cron setup and troubleshooting: `docs/VERCEL-CRON-SETUP.md`.
+GitHub scheduler setup and troubleshooting: `docs/GITHUB-CRON-SETUP.md`.
 
 ## 6) Pre-Go-Live Checklist
 
