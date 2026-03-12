@@ -91,9 +91,10 @@ Optional Vercel **Environment Variables**:
 - `NETLAS_QUERY`
 - `NETLAS_BASE_URL`
 - `NETLAS_TIMEOUT_MS`
-- `NETLAS_VALIDATION_QUERY`
 - `NETLAS_VALIDATION_START`
 - `NETLAS_VALIDATION_MAX_KEYS`
+- `NETLAS_VALIDATION_MAX_PAGES`
+- `NETLAS_DAILY_REQUEST_BUDGET_PER_KEY`
 
 `NETLAS_VALIDATION_MAX_KEYS` defaults to `2` (balanced mode).
 Dictionary values are loaded from `app_dictionary` and seeded from `lib/server/runtime-dictionary.mjs`.
@@ -117,3 +118,4 @@ If production database access becomes unavailable:
 4. Switch back to `EXPOSURE_DATA_SOURCE=database`
 
 Use this only as a temporary emergency path.
+

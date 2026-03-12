@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_BASE_URL = "https://app.netlas.io";
+const DEFAULT_OPENCLAW_QUERY = "(http.title:\"OpenClaw Control\") OR (http.body:\"openclaw-app\") OR (http.body:\"__OPENCLAW_CONTROL_UI_BASE_PATH__\")";
 const SEARCH_PATH = "/api/responses/";
 
 function asInt(value, fallback) {
@@ -336,7 +337,7 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
 
 async function main() {
   const apiKeys = parseApiKeys();
-  const query = process.env.NETLAS_QUERY?.trim() || "port:18789";
+  const query = process.env.NETLAS_QUERY?.trim() || DEFAULT_OPENCLAW_QUERY;
   const baseUrl = (process.env.NETLAS_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const maxPages = asInt(process.env.NETLAS_MAX_PAGES, 5);
   const startStep = asInt(process.env.NETLAS_START_STEP, 20);
@@ -370,9 +371,11 @@ async function main() {
   let activeKeyIndex = 0;
   let consecutiveLowNewPages = 0;
   let stopReason = "max_pages_reached";
+  let nextStart = 0;
+  let observedPageSize = null;
 
   for (let page = 0; page < maxPages; page += 1) {
-    const start = page * startStep;
+    const start = nextStart;
 
     const { payload, keyIndex } = await fetchPageWithKeyPool({
       apiKeys,
@@ -445,7 +448,14 @@ async function main() {
       break;
     }
 
-    if (items.length < startStep) {
+    if (observedPageSize === null) {
+      observedPageSize = items.length;
+    }
+
+    const expectedPageSize = observedPageSize ?? startStep;
+    nextStart += items.length;
+
+    if (items.length < expectedPageSize) {
       stopReason = "last_page_short";
       break;
     }
@@ -481,3 +491,4 @@ main().catch((error) => {
   console.error(error.message);
   process.exit(1);
 });
+
