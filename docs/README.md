@@ -22,3 +22,8 @@
 - 新同事建议先读 `PROJECT.md`。
 
 - [PRODUCTION-DEPLOY.md](PRODUCTION-DEPLOY.md): Production-only deployment and local-vs-production runtime notes.
+
+## Milestone Validation
+- [MILESTONE-VALIDATION.md](MILESTONE-VALIDATION.md): Milestone validation SOP and required report template.
+- [MILESTONE-2026-03-12-hourly-sync.md](MILESTONE-2026-03-12-hourly-sync.md): Stage report for hourly sync milestone.
+
