@@ -7,6 +7,12 @@ type MutablePoint = {
   country: string;
   latitude: number;
   longitude: number;
+  latestSeenAtEpochMs: number;
+  isp: string | null;
+  asnName: string | null;
+  asnNumber: string | null;
+  organization: string | null;
+  instanceCount: number;
   count: number;
   ports: Set<number>;
 };
@@ -16,6 +22,11 @@ type DatabasePointRow = {
   country: string | null;
   latitude: number | null;
   longitude: number | null;
+  isp: string | null;
+  asn_name: string | null;
+  asn_number: string | null;
+  organization: string | null;
+  instance_count: number | string | null;
   hit_count: number | string | null;
   ports: unknown;
   last_seen_at: string | Date | null;
@@ -29,6 +40,34 @@ const globalForPg = globalThis as typeof globalThis & {
 
 function normalizeIp(raw: string): string {
   return raw.trim().replace(/^\[|\]$/g, "");
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (normalized.length === 0) return null;
+
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(normalized);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (typeof item === "string") {
+            const text = item.trim();
+            if (text.length > 0) return text;
+          } else if (item !== null && item !== undefined) {
+            const text = String(item).trim();
+            if (text.length > 0) return text;
+          }
+        }
+        return null;
+      }
+    } catch {
+      // Keep original normalized string when not valid JSON.
+    }
+  }
+
+  return normalized;
 }
 
 function isPublicIPv4(ip: string): boolean {
@@ -126,6 +165,11 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
     ip: point.ip,
     country: point.country || "Unknown",
     portSummary: [...point.ports].sort((a, b) => a - b).join(", "),
+    isp: point.isp,
+    asnName: point.asnName,
+    asnNumber: point.asnNumber,
+    organization: point.organization,
+    instanceCount: point.instanceCount,
     count: point.count,
     value: [point.longitude, point.latitude, point.count],
   }));
@@ -143,6 +187,11 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
         coalesce(nullif(country, ''), 'Unknown') as country,
         latitude,
         longitude,
+        (array_remove(array_agg(nullif(raw_hit->'data'->>'isp', '') order by last_seen_at desc), null))[1] as isp,
+        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '') order by last_seen_at desc), null))[1] as asn_name,
+        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '') order by last_seen_at desc), null))[1] as asn_number,
+        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '') order by last_seen_at desc), null))[1] as organization,
+        count(distinct coalesce(asset_key, concat_ws('|', host(ip), coalesce(port, 0)::text, coalesce(protocol, 'unknown'))))::int as instance_count,
         sum(greatest(seen_count, 1))::int as hit_count,
         array_remove(array_agg(distinct port order by port), null) as ports,
         max(last_seen_at) as last_seen_at
@@ -169,6 +218,11 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
         coalesce(nullif(country, ''), 'Unknown') as country,
         latitude,
         longitude,
+        max(nullif(raw_hit->'data'->>'isp', '')) as isp,
+        max(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '')) as asn_name,
+        max(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '')) as asn_number,
+        max(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '')) as organization,
+        count(distinct coalesce(asset_key, concat_ws('|', host(ip), coalesce(port, 0)::text, coalesce(protocol, 'unknown'))))::int as instance_count,
         count(*)::int as hit_count,
         array_remove(array_agg(distinct port order by port), null) as ports,
         null::timestamptz as last_seen_at
@@ -188,6 +242,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     return {
       generatedAt: null,
       sourceFile: DATABASE_SOURCE_FILE,
+      totalInstances: 0,
       totalRecords: 0,
       publicRecords: 0,
       plottedPoints: 0,
@@ -201,6 +256,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
 
   const pointMap = new Map<string, MutablePoint>();
   const countryCounts = new Map<string, number>();
+  let totalInstances = 0;
   let publicRecords = 0;
   let generatedAtEpochMs = 0;
 
@@ -216,20 +272,45 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       continue;
     }
 
+    const instanceCountRaw = Number.parseInt(String(row.instance_count ?? "1"), 10);
+    const instanceCount = Number.isInteger(instanceCountRaw) && instanceCountRaw > 0 ? instanceCountRaw : 1;
     const countRaw = Number.parseInt(String(row.hit_count ?? "1"), 10);
     const count = Number.isInteger(countRaw) && countRaw > 0 ? countRaw : 1;
     const country = String(row.country ?? "Unknown").trim() || "Unknown";
     const ports = normalizePortList(row.ports);
+    const rowLastSeenEpochMs = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
+    const isp = normalizeOptionalText(row.isp);
+    const asnName = normalizeOptionalText(row.asn_name);
+    const asnNumber = normalizeOptionalText(row.asn_number);
+    const organization = normalizeOptionalText(row.organization);
 
+    totalInstances += instanceCount;
     publicRecords += count;
     countryCounts.set(country, (countryCounts.get(country) ?? 0) + count);
 
-    const key = `${ip}|${latitude.toFixed(4)}|${longitude.toFixed(4)}`;
+    const key = ip;
     const existing = pointMap.get(key);
     if (existing) {
+      existing.instanceCount += instanceCount;
       existing.count += count;
       for (const port of ports) {
         existing.ports.add(port);
+      }
+
+      if (Number.isFinite(rowLastSeenEpochMs) && rowLastSeenEpochMs > existing.latestSeenAtEpochMs) {
+        existing.latestSeenAtEpochMs = rowLastSeenEpochMs;
+        existing.country = country;
+        existing.latitude = latitude;
+        existing.longitude = longitude;
+        existing.isp = isp ?? existing.isp;
+        existing.asnName = asnName ?? existing.asnName;
+        existing.asnNumber = asnNumber ?? existing.asnNumber;
+        existing.organization = organization ?? existing.organization;
+      } else {
+        if (!existing.isp && isp) existing.isp = isp;
+        if (!existing.asnName && asnName) existing.asnName = asnName;
+        if (!existing.asnNumber && asnNumber) existing.asnNumber = asnNumber;
+        if (!existing.organization && organization) existing.organization = organization;
       }
     } else {
       pointMap.set(key, {
@@ -237,16 +318,19 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
         country,
         latitude,
         longitude,
+        latestSeenAtEpochMs: Number.isFinite(rowLastSeenEpochMs) ? rowLastSeenEpochMs : 0,
+        isp,
+        asnName,
+        asnNumber,
+        organization,
+        instanceCount,
         count,
         ports: new Set(ports),
       });
     }
 
-    if (row.last_seen_at) {
-      const epochMs = new Date(row.last_seen_at).getTime();
-      if (Number.isFinite(epochMs) && epochMs > generatedAtEpochMs) {
-        generatedAtEpochMs = epochMs;
-      }
+    if (Number.isFinite(rowLastSeenEpochMs) && rowLastSeenEpochMs > generatedAtEpochMs) {
+      generatedAtEpochMs = rowLastSeenEpochMs;
     }
   }
 
@@ -256,6 +340,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
   return {
     generatedAt: generatedAtEpochMs > 0 ? new Date(generatedAtEpochMs).toISOString() : null,
     sourceFile: DATABASE_SOURCE_FILE,
+    totalInstances,
     totalRecords: publicRecords,
     publicRecords,
     plottedPoints: points.length,
@@ -280,6 +365,7 @@ export async function loadLatestExposureSnapshot(): Promise<ExposureSnapshot> {
     return {
       generatedAt: null,
       sourceFile: null,
+      totalInstances: 0,
       totalRecords: 0,
       publicRecords: 0,
       plottedPoints: 0,

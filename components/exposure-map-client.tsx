@@ -39,7 +39,8 @@ function MapSelectionController({ target }: { target: PlottedPoint | null }) {
       return;
     }
 
-    const nextZoom = Math.max(map.getZoom(), 5);
+    const maxZoom = map.getMaxZoom();
+    const nextZoom = Number.isFinite(maxZoom) ? maxZoom : 19;
     map.flyTo([target.lat, target.lon], nextZoom, {
       duration: 0.9,
     });
@@ -139,13 +140,15 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
         center={[20, 0]}
         zoom={2}
         minZoom={2}
-        maxZoom={10}
+        maxZoom={19}
         worldCopyJump
         className="size-full"
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
+          maxNativeZoom={19}
         />
         <MapSelectionController target={matchedPoint} />
 
@@ -160,7 +163,23 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
 
           const popupRows = [
             { label: "Country", value: point.country },
-            { label: "Records", value: point.count.toString() },
+            ...(point.isp ? [{ label: "ISP", value: point.isp }] : []),
+            ...(point.asnName || point.asnNumber
+              ? [
+                  {
+                    label: "ASN",
+                    value:
+                      point.asnNumber && point.asnName
+                        ? `AS${point.asnNumber} ${point.asnName}`
+                        : point.asnNumber
+                          ? `AS${point.asnNumber}`
+                          : point.asnName ?? "N/A",
+                  },
+                ]
+              : []),
+            ...(point.organization ? [{ label: "Organization", value: point.organization }] : []),
+            { label: "Instances", value: point.instanceCount.toString() },
+            { label: "Hits", value: point.count.toString() },
             { label: "Ports", value: point.portSummary || "N/A" },
             { label: "Updated", value: generatedAtLabel },
           ];

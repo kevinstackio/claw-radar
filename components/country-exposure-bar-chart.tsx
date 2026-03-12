@@ -31,14 +31,14 @@ type PieTooltipPayloadItem = {
 
 const barChartConfig = {
   records: {
-    label: "Records",
+    label: "Hits",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
 const pieChartConfig = {
   value: {
-    label: "Records",
+    label: "Hits",
     color: "var(--chart-1)",
   },
   c1: { label: "Slice 1", color: "var(--chart-1)" },
@@ -95,7 +95,7 @@ function PieCountryTooltip({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: markerColor }} />
-          <span className={informationText.l4Meta}>Records</span>
+          <span className={informationText.l4Meta}>Hits</span>
         </div>
         <span className={informationText.rowValue}>{count}</span>
       </div>
@@ -139,7 +139,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   );
 
   const title = mode === "pie" ? "Exposure Share" : "Exposure Count";
-  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Ranking of all countries";
+  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Ranking of all countries by hits";
 
   return (
     <div className="relative size-full">

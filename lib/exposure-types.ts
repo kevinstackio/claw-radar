@@ -8,6 +8,11 @@ export type ExposurePoint = {
   ip: string;
   country: string;
   portSummary: string;
+  isp: string | null;
+  asnName: string | null;
+  asnNumber: string | null;
+  organization: string | null;
+  instanceCount: number;
   count: number;
   value: [number, number, number];
 };
@@ -15,6 +20,7 @@ export type ExposurePoint = {
 export type ExposureSnapshot = {
   generatedAt: string | null;
   sourceFile: string | null;
+  totalInstances: number;
   totalRecords: number;
   publicRecords: number;
   plottedPoints: number;

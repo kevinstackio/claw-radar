@@ -39,6 +39,10 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                       <div className={informationLayout.summaryList}>
                         <div className={informationLayout.summaryRow}>
                           <p className={informationText.rowLabel}>Total</p>
+                          <p className={informationText.rowValue}>{snapshot.totalInstances}</p>
+                        </div>
+                        <div className={informationLayout.summaryRow}>
+                          <p className={informationText.rowLabel}>Hits</p>
                           <p className={informationText.rowValue}>{snapshot.totalRecords}</p>
                         </div>
                         <div className={informationLayout.summaryRow}>

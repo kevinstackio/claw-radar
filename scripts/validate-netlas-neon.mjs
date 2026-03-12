@@ -281,7 +281,8 @@ function normalizeHit(item, index, query, queryHash) {
 
   const protocolNorm = String(protocol).toLowerCase();
   const assetKey = `${ip}|${port ?? 0}|${protocolNorm}`;
-  const hitHash = sha256(`${assetKey}|${country.toLowerCase()}|${latitude.toFixed(4)}|${longitude.toFixed(4)}|${queryHash}`);
+  // Instance-level dedupe: same ip+port+protocol should always map to the same hit hash.
+  const hitHash = sha256(`netlas|${assetKey}`);
 
   return {
     valid: true,
