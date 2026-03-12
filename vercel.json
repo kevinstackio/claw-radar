@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/netlas-sync",
-      "schedule": "35 17 * * *"
+      "schedule": "30 1 * * *"
     }
   ]
 }
