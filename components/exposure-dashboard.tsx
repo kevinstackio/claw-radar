@@ -76,7 +76,7 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                                       className={informationLayout.summaryHelpTrigger}
                                       aria-label={`More information about ${item.title}`}
                                     >
-                                      <Info className="h-3 w-3" strokeWidth={1.9} />
+                                      <Info className="h-2.5 w-2.5" strokeWidth={1.9} />
                                     </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="top">{item.tip}</TooltipContent>

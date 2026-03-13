@@ -12,9 +12,9 @@ export const informationText = {
 export const informationLayout = {
   summaryList: "space-y-2",
   summaryRow: "flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2",
-  summaryLabelWrap: "flex min-w-0 items-center gap-1.5",
+  summaryLabelWrap: "flex min-w-0 items-center gap-1",
   summaryHelpTrigger:
-    "inline-flex h-3.5 w-3.5 items-center justify-center text-muted-foreground/75 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "inline-flex h-3 w-3 items-center justify-center text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   summaryValueWrap: "max-w-[58%] text-right leading-tight break-words",
   noticeBlock: "space-y-3",
   sectionTitle: "text-sm font-semibold text-foreground",

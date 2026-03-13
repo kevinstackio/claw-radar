@@ -5,6 +5,7 @@ import type { CountryExposure, ExposurePoint, ExposureSnapshot } from "@/lib/exp
 type MutablePoint = {
   ip: string;
   country: string;
+  city: string | null;
   latitude: number;
   longitude: number;
   latestSeenAtEpochMs: number;
@@ -20,6 +21,7 @@ type MutablePoint = {
 type DatabasePointRow = {
   ip: string | null;
   country: string | null;
+  city: string | null;
   latitude: number | null;
   longitude: number | null;
   isp: string | null;
@@ -168,6 +170,7 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
     name: point.country || point.ip,
     ip: point.ip,
     country: point.country || "Unknown",
+    city: point.city,
     portSummary: [...point.ports].sort((a, b) => a - b).join(", "),
     isp: point.isp,
     asnName: point.asnName,
@@ -222,6 +225,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       select
         host(ip) as ip,
         coalesce(nullif(country, ''), 'Unknown') as country,
+        (array_remove(array_agg(nullif(city, '') order by last_seen_at desc), null))[1] as city,
         latitude,
         longitude,
         (array_remove(array_agg(nullif(raw_hit->'data'->>'isp', '') order by last_seen_at desc), null))[1] as isp,
@@ -253,6 +257,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       select
         host(ip) as ip,
         coalesce(nullif(country, ''), 'Unknown') as country,
+        max(nullif(city, '')) as city,
         latitude,
         longitude,
         max(nullif(raw_hit->'data'->>'isp', '')) as isp,
@@ -314,6 +319,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     const countRaw = Number.parseInt(String(row.hit_count ?? "1"), 10);
     const count = Number.isInteger(countRaw) && countRaw > 0 ? countRaw : 1;
     const country = String(row.country ?? "Unknown").trim() || "Unknown";
+    const city = normalizeOptionalText(row.city);
     const ports = normalizePortList(row.ports);
     const rowLastSeenEpochMs = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
     const isp = normalizeOptionalText(row.isp);
@@ -337,6 +343,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       if (Number.isFinite(rowLastSeenEpochMs) && rowLastSeenEpochMs > existing.latestSeenAtEpochMs) {
         existing.latestSeenAtEpochMs = rowLastSeenEpochMs;
         existing.country = country;
+        existing.city = city;
         existing.latitude = latitude;
         existing.longitude = longitude;
         existing.isp = isp ?? existing.isp;
@@ -353,6 +360,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       pointMap.set(key, {
         ip,
         country,
+        city,
         latitude,
         longitude,
         latestSeenAtEpochMs: Number.isFinite(rowLastSeenEpochMs) ? rowLastSeenEpochMs : 0,

@@ -7,6 +7,7 @@ export type ExposurePoint = {
   name: string;
   ip: string;
   country: string;
+  city: string | null;
   portSummary: string;
   isp: string | null;
   asnName: string | null;

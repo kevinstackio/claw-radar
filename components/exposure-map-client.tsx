@@ -1,10 +1,10 @@
 "use client";
 
 import type { CircleMarker as LeafletCircleMarker } from "leaflet";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 
-import { formatSnapshotDate } from "@/lib/datetime";
+import { formatSnapshotTime } from "@/lib/datetime";
 import type { ExposureSnapshot } from "@/lib/exposure-types";
 import {
   IP_SEARCH_EVENT,
@@ -23,12 +23,545 @@ type PlottedPoint = ExposureSnapshot["points"][number] & {
   count: number;
 };
 
+type ClusterKind = "global" | "country" | "city";
+
+type CountEntry = {
+  label: string;
+  value: number;
+};
+
+type AggregateBucket = {
+  key: string;
+  kind: ClusterKind;
+  label: string;
+  country: string | null;
+  city: string | null;
+  latWeighted: number;
+  lonWeighted: number;
+  weightTotal: number;
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+  anchorLat: number | null;
+  anchorLon: number | null;
+  anchorDistance: number;
+  anchorWeight: number;
+  instanceCount: number;
+  seenCount: number;
+  pointCount: number;
+  countries: Map<string, number>;
+  cities: Map<string, number>;
+  ports: Map<string, number>;
+  organizations: Map<string, number>;
+};
+
+type ClusterNode = {
+  key: string;
+  kind: ClusterKind;
+  label: string;
+  country: string | null;
+  city: string | null;
+  lat: number;
+  lon: number;
+  instanceCount: number;
+  seenCount: number;
+  pointCount: number;
+  countryCount: number;
+  cityCount: number;
+  topCountries: CountEntry[];
+  topCities: CountEntry[];
+  topPorts: CountEntry[];
+  topOrganizations: CountEntry[];
+};
+
+type InstanceNode = {
+  key: string;
+  kind: "instance";
+  point: PlottedPoint;
+};
+
+type MapNode = ClusterNode | InstanceNode;
+
+type ClusterVisualSpec = {
+  markerRadius: number;
+  fillOpacity: number;
+  ripplePrimaryOffset: number;
+  rippleSecondaryOffset: number;
+  ripplePrimaryWeight: number;
+  rippleSecondaryWeight: number;
+  ripplePrimaryOpacity: number;
+  rippleSecondaryOpacity: number;
+};
+
+const MAP_LAYER_ZOOM_RANGES = {
+  global: { min: 0, max: 3 },
+  country: { min: 4, max: 6 },
+  city: { min: 7, max: 9 },
+  instance: { min: 10, max: 12 },
+} as const;
+
+const MAP_MAX_ZOOM = MAP_LAYER_ZOOM_RANGES.instance.max;
+const MAP_TILE_DETAIL_MAX_ZOOM = 10;
+const compactNumberFormatter = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+const CLUSTER_VISUAL_SPECS: Record<ClusterKind, ClusterVisualSpec> = {
+  // Frozen baseline for the world view. Keep this unchanged unless we explicitly revisit the global layer.
+  global: {
+    markerRadius: 4.1,
+    fillOpacity: 0.68,
+    ripplePrimaryOffset: 2.1,
+    rippleSecondaryOffset: 4.1,
+    ripplePrimaryWeight: 1.2,
+    rippleSecondaryWeight: 1,
+    ripplePrimaryOpacity: 0.58,
+    rippleSecondaryOpacity: 0.4,
+  },
+  country: {
+    markerRadius: 4.7,
+    fillOpacity: 0.76,
+    ripplePrimaryOffset: 1.9,
+    rippleSecondaryOffset: 3.7,
+    ripplePrimaryWeight: 1.1,
+    rippleSecondaryWeight: 0.9,
+    ripplePrimaryOpacity: 0.58,
+    rippleSecondaryOpacity: 0.4,
+  },
+  city: {
+    markerRadius: 5.1,
+    fillOpacity: 0.82,
+    ripplePrimaryOffset: 1.9,
+    rippleSecondaryOffset: 3.7,
+    ripplePrimaryWeight: 1.1,
+    rippleSecondaryWeight: 0.9,
+    ripplePrimaryOpacity: 0.58,
+    rippleSecondaryOpacity: 0.4,
+  },
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
 function isValidCoordinate(lat: number, lon: number) {
   return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
+function roundForGrid(value: number, step: number) {
+  return Math.floor(value / step) * step;
+}
+
+function normalizeCityName(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function addCount(map: Map<string, number>, key: string | null | undefined, value: number) {
+  const normalizedKey = String(key ?? "").trim();
+  if (!normalizedKey) {
+    return;
+  }
+  map.set(normalizedKey, (map.get(normalizedKey) ?? 0) + value);
+}
+
+function collectPorts(portSummary: string, weight: number, map: Map<string, number>) {
+  portSummary
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .forEach((port) => addCount(map, port, weight));
+}
+
+function toTopEntries(map: Map<string, number>, limit = 3): CountEntry[] {
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, value]) => ({ label, value }));
+}
+
+function formatCompactNumber(value: number) {
+  return compactNumberFormatter.format(value);
+}
+
+function createBucket(
+  key: string,
+  kind: ClusterKind,
+  label: string,
+  options?: { country?: string | null; city?: string | null }
+): AggregateBucket {
+  return {
+    key,
+    kind,
+    label,
+    country: options?.country ?? null,
+    city: options?.city ?? null,
+    latWeighted: 0,
+    lonWeighted: 0,
+    weightTotal: 0,
+    latMin: Number.POSITIVE_INFINITY,
+    latMax: Number.NEGATIVE_INFINITY,
+    lonMin: Number.POSITIVE_INFINITY,
+    lonMax: Number.NEGATIVE_INFINITY,
+    anchorLat: null,
+    anchorLon: null,
+    anchorDistance: Number.POSITIVE_INFINITY,
+    anchorWeight: 0,
+    instanceCount: 0,
+    seenCount: 0,
+    pointCount: 0,
+    countries: new Map(),
+    cities: new Map(),
+    ports: new Map(),
+    organizations: new Map(),
+  };
+}
+
+function accumulateBucket(bucket: AggregateBucket, point: PlottedPoint) {
+  const weight = Math.max(point.count, 1);
+  bucket.latWeighted += point.lat * weight;
+  bucket.lonWeighted += point.lon * weight;
+  bucket.weightTotal += weight;
+  bucket.latMin = Math.min(bucket.latMin, point.lat);
+  bucket.latMax = Math.max(bucket.latMax, point.lat);
+  bucket.lonMin = Math.min(bucket.lonMin, point.lon);
+  bucket.lonMax = Math.max(bucket.lonMax, point.lon);
+  bucket.instanceCount += point.instanceCount;
+  bucket.seenCount += point.count;
+  bucket.pointCount += 1;
+
+  addCount(bucket.countries, point.country, point.count);
+  addCount(bucket.cities, normalizeCityName(point.city), point.count);
+  collectPorts(point.portSummary, point.count, bucket.ports);
+
+  const organizationLabel =
+    point.organization ??
+    point.isp ??
+    (point.asnName && point.asnNumber
+      ? `AS${point.asnNumber} ${point.asnName}`
+      : point.asnName
+        ? point.asnName
+        : point.asnNumber
+          ? `AS${point.asnNumber}`
+          : null);
+  addCount(bucket.organizations, organizationLabel, point.count);
+}
+
+function getGlobalAnchorTarget(bucket: AggregateBucket) {
+  return {
+    lat: (bucket.latMin + bucket.latMax) / 2,
+    lon: (bucket.lonMin + bucket.lonMax) / 2,
+  };
+}
+
+function attachGlobalAnchors(buckets: Map<string, AggregateBucket>, points: PlottedPoint[]) {
+  for (const point of points) {
+    const country = point.country || "Unknown";
+    const bucket = buckets.get(`global-country:${country}`);
+    if (!bucket || !Number.isFinite(bucket.latMin) || !Number.isFinite(bucket.lonMin)) {
+      continue;
+    }
+
+    const target = getGlobalAnchorTarget(bucket);
+    const latDelta = point.lat - target.lat;
+    const lonDelta = point.lon - target.lon;
+    const distance = latDelta * latDelta + lonDelta * lonDelta;
+    const anchorWeight = Math.max(point.instanceCount, point.count, 1);
+
+    if (
+      distance < bucket.anchorDistance ||
+      (Math.abs(distance - bucket.anchorDistance) < 0.000001 && anchorWeight > bucket.anchorWeight)
+    ) {
+      bucket.anchorLat = point.lat;
+      bucket.anchorLon = point.lon;
+      bucket.anchorDistance = distance;
+      bucket.anchorWeight = anchorWeight;
+    }
+  }
+}
+
+function finalizeBuckets(buckets: Map<string, AggregateBucket>): ClusterNode[] {
+  return [...buckets.values()]
+    .map((bucket) => ({
+      key: bucket.key,
+      kind: bucket.kind,
+      label: bucket.label,
+      country: bucket.country,
+      city: bucket.city,
+      lat:
+        bucket.kind === "global" && bucket.anchorLat !== null
+          ? bucket.anchorLat
+          : bucket.weightTotal > 0
+            ? bucket.latWeighted / bucket.weightTotal
+            : 0,
+      lon:
+        bucket.kind === "global" && bucket.anchorLon !== null
+          ? bucket.anchorLon
+          : bucket.weightTotal > 0
+            ? bucket.lonWeighted / bucket.weightTotal
+            : 0,
+      instanceCount: bucket.instanceCount,
+      seenCount: bucket.seenCount,
+      pointCount: bucket.pointCount,
+      countryCount: bucket.countries.size,
+      cityCount: bucket.cities.size,
+      topCountries: toTopEntries(bucket.countries),
+      topCities: toTopEntries(bucket.cities),
+      topPorts: toTopEntries(bucket.ports),
+      topOrganizations: toTopEntries(bucket.organizations),
+    }))
+    .sort((a, b) => b.instanceCount - a.instanceCount);
+}
+
+function cityGridStepForZoom(zoom: number) {
+  if (zoom <= 7) return 1.8;
+  if (zoom === 8) return 1.1;
+  return 0.65;
+}
+
+function buildGlobalNodes(points: PlottedPoint[]): ClusterNode[] {
+  const buckets = new Map<string, AggregateBucket>();
+
+  for (const point of points) {
+    const country = point.country || "Unknown";
+    const key = `global-country:${country}`;
+    const bucket =
+      buckets.get(key) ??
+      createBucket(key, "global", country, {
+        country,
+      });
+
+    accumulateBucket(bucket, point);
+    buckets.set(key, bucket);
+  }
+
+  attachGlobalAnchors(buckets, points);
+
+  return finalizeBuckets(buckets);
+}
+
+function buildCountryNodes(points: PlottedPoint[]): ClusterNode[] {
+  const buckets = new Map<string, AggregateBucket>();
+
+  for (const point of points) {
+    const country = point.country || "Unknown";
+    const key = `country:${country}`;
+    const bucket =
+      buckets.get(key) ??
+      createBucket(key, "country", country, {
+        country,
+      });
+
+    accumulateBucket(bucket, point);
+    buckets.set(key, bucket);
+  }
+
+  return finalizeBuckets(buckets);
+}
+
+function buildCityNodes(points: PlottedPoint[], zoom: number): ClusterNode[] {
+  const coordStep = cityGridStepForZoom(zoom);
+  const buckets = new Map<string, AggregateBucket>();
+
+  for (const point of points) {
+    const country = point.country || "Unknown";
+    const city = normalizeCityName(point.city);
+    const key = city
+      ? `city:${country}:${city.toLowerCase()}`
+      : `city-grid:${country}:${roundForGrid(point.lat + 90, coordStep)}:${roundForGrid(point.lon + 180, coordStep)}`;
+    const label = city ?? `${country} Area`;
+    const bucket =
+      buckets.get(key) ??
+      createBucket(key, "city", label, {
+        country,
+        city,
+      });
+
+    accumulateBucket(bucket, point);
+    buckets.set(key, bucket);
+  }
+
+  return finalizeBuckets(buckets);
+}
+
+function buildInstanceNodes(points: PlottedPoint[]): InstanceNode[] {
+  return points.map((point) => ({
+    key: `${point.ip}-${point.lat}-${point.lon}`,
+    kind: "instance",
+    point,
+  }));
+}
+
+function getClusterMarkerRadius(node: ClusterNode) {
+  return CLUSTER_VISUAL_SPECS[node.kind].markerRadius;
+}
+
+function getClusterMarkerStyle(node: ClusterNode) {
+  return {
+    stroke: "var(--map-marker-stroke)",
+    fill: "var(--map-marker-fill)",
+    fillOpacity: CLUSTER_VISUAL_SPECS[node.kind].fillOpacity,
+  };
+}
+
+function getClusterRippleRadius(node: ClusterNode, ring: 1 | 2) {
+  const baseRadius = getClusterMarkerRadius(node);
+  const layerSpec = CLUSTER_VISUAL_SPECS[node.kind];
+  const offset = ring === 1 ? layerSpec.ripplePrimaryOffset : layerSpec.rippleSecondaryOffset;
+  return baseRadius + offset;
+}
+
+function MetricRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={informationLayout.popupRow}>
+      <span className={informationLayout.popupLabel}>{label}</span>
+      <span className={informationLayout.popupValue}>{value}</span>
+    </div>
+  );
+}
+
+function PopupTopList({ title, items }: { title: string; items: CountEntry[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className={informationText.l3Label}>{title}</p>
+      <div className="space-y-1.5">
+        {items.map((item) => (
+          <div key={`${title}-${item.label}`} className={informationLayout.popupRow}>
+            <span className={informationLayout.popupLabel}>{item.label}</span>
+            <span className={informationLayout.popupValue}>{formatCompactNumber(item.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClusterPopupContent({
+  node,
+  updatedAtLabel,
+}: {
+  node: ClusterNode;
+  updatedAtLabel: string;
+}) {
+  const title =
+    node.kind === "global"
+      ? node.country ?? node.label
+      : node.kind === "country"
+        ? node.country ?? node.label
+        : node.city ?? node.label;
+  const subtitle =
+    node.kind === "global"
+      ? `Zoom ${MAP_LAYER_ZOOM_RANGES.global.min}-${MAP_LAYER_ZOOM_RANGES.global.max} country anchor`
+      : node.kind === "country"
+        ? "Country / region aggregate"
+        : node.country
+          ? `${node.country} city aggregate`
+          : "City aggregate";
+
+  const rows =
+    node.kind === "global"
+      ? [
+          { label: "Country", value: node.country ?? "Unknown" },
+          { label: "Cities", value: node.cityCount.toString() },
+          { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
+          { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
+          { label: "Points", value: node.pointCount.toLocaleString("en-US") },
+          { label: "Updated", value: updatedAtLabel },
+        ]
+      : node.kind === "country"
+        ? [
+            { label: "Country", value: node.country ?? "Unknown" },
+            { label: "Cities", value: node.cityCount.toString() },
+            { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
+            { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
+            { label: "Points", value: node.pointCount.toLocaleString("en-US") },
+            { label: "Updated", value: updatedAtLabel },
+          ]
+        : [
+            { label: "City", value: node.city ?? node.label },
+            { label: "Country", value: node.country ?? "Unknown" },
+            { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
+            { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
+            { label: "Points", value: node.pointCount.toLocaleString("en-US") },
+            { label: "Updated", value: updatedAtLabel },
+          ];
+
+  return (
+    <div className={informationLayout.popupContainer}>
+      <div className="space-y-1 px-1">
+        <p className={informationLayout.sectionTitle}>{title}</p>
+        <p className={informationLayout.sectionSubtitle}>{subtitle}</p>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <MetricRow key={`${node.key}-${row.label}`} label={row.label} value={row.value} />
+        ))}
+      </div>
+      <PopupTopList
+        title={
+          node.kind === "global" ? "Top Cities" : node.kind === "country" ? "Top Cities" : "Top Organizations"
+        }
+        items={
+          node.kind === "global"
+            ? node.topCities
+            : node.kind === "country"
+              ? node.topCities
+              : node.topOrganizations
+        }
+      />
+      <PopupTopList title="Top Ports" items={node.topPorts} />
+    </div>
+  );
+}
+
+function InstancePopupContent({
+  point,
+  updatedAtLabel,
+}: {
+  point: PlottedPoint;
+  updatedAtLabel: string;
+}) {
+  const popupRows = [
+    { label: "Country", value: point.country },
+    ...(point.city ? [{ label: "City", value: point.city }] : []),
+    ...(point.isp ? [{ label: "ISP", value: point.isp }] : []),
+    ...(point.asnName || point.asnNumber
+      ? [
+          {
+            label: "ASN",
+            value:
+              point.asnNumber && point.asnName
+                ? `AS${point.asnNumber} ${point.asnName}`
+                : point.asnNumber
+                  ? `AS${point.asnNumber}`
+                  : point.asnName ?? "N/A",
+          },
+        ]
+      : []),
+    ...(point.organization ? [{ label: "Organization", value: point.organization }] : []),
+    { label: "Instances", value: point.instanceCount.toLocaleString("en-US") },
+    { label: "Seen", value: point.count.toLocaleString("en-US") },
+    { label: "Ports", value: point.portSummary || "N/A" },
+    { label: "Updated", value: updatedAtLabel },
+  ];
+
+  return (
+    <div className={informationLayout.popupContainer}>
+      <div className="space-y-1 px-1">
+        <p className={informationLayout.sectionTitle}>{point.ip}</p>
+        <p className={informationLayout.sectionSubtitle}>Single instance view</p>
+      </div>
+      {popupRows.map((row) => (
+        <MetricRow key={`${point.ip}-${row.label}`} label={row.label} value={row.value} />
+      ))}
+    </div>
+  );
 }
 
 function MapSelectionController({ target }: { target: PlottedPoint | null }) {
@@ -40,7 +573,7 @@ function MapSelectionController({ target }: { target: PlottedPoint | null }) {
     }
 
     const maxZoom = map.getMaxZoom();
-    const nextZoom = Number.isFinite(maxZoom) ? maxZoom : 19;
+    const nextZoom = Number.isFinite(maxZoom) ? maxZoom : MAP_MAX_ZOOM;
     map.flyTo([target.lat, target.lon], nextZoom, {
       duration: 0.9,
     });
@@ -49,8 +582,23 @@ function MapSelectionController({ target }: { target: PlottedPoint | null }) {
   return null;
 }
 
+function MapZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
+  const map = useMapEvents({
+    zoomend() {
+      onZoomChange(map.getZoom());
+    },
+  });
+
+  useEffect(() => {
+    onZoomChange(map.getZoom());
+  }, [map, onZoomChange]);
+
+  return null;
+}
+
 export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
   const [searchResult, setSearchResult] = useState<IpSearchResult | null>(null);
+  const [mapZoom, setMapZoom] = useState(2);
   const markerRefs = useRef<Record<string, LeafletCircleMarker>>({});
 
   useEffect(() => {
@@ -98,7 +646,23 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     ? `${matchedPoint.ip}-${matchedPoint.lat}-${matchedPoint.lon}`
     : null;
 
-  const generatedAtLabel = formatSnapshotDate(snapshot.generatedAt);
+  const updatedAtLabel = formatSnapshotTime(snapshot.generatedAt);
+
+  const mapNodes = useMemo<MapNode[]>(() => {
+    if (mapZoom >= MAP_LAYER_ZOOM_RANGES.instance.min) {
+      return buildInstanceNodes(plottedPoints);
+    }
+
+    if (mapZoom >= MAP_LAYER_ZOOM_RANGES.city.min) {
+      return buildCityNodes(plottedPoints, mapZoom);
+    }
+
+    if (mapZoom >= MAP_LAYER_ZOOM_RANGES.country.min) {
+      return buildCountryNodes(plottedPoints);
+    }
+
+    return buildGlobalNodes(plottedPoints);
+  }, [mapZoom, plottedPoints]);
 
   useEffect(() => {
     if (!matchedPointKey) {
@@ -139,89 +703,101 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
         attributionControl={false}
         center={[20, 0]}
         zoom={2}
-        minZoom={2}
-        maxZoom={19}
+        minZoom={0}
+        maxZoom={MAP_MAX_ZOOM}
         worldCopyJump
         className="size-full"
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-          maxNativeZoom={19}
+          maxZoom={MAP_MAX_ZOOM}
+          maxNativeZoom={MAP_TILE_DETAIL_MAX_ZOOM}
         />
+        <MapZoomTracker onZoomChange={setMapZoom} />
         <MapSelectionController target={matchedPoint} />
 
-        {plottedPoints.map((point) => {
-          const isSelected = matchedPoint?.ip === point.ip;
-          const pointKey = `${point.ip}-${point.lat}-${point.lon}`;
-          const radius = clamp(
-            3 + Math.log2(Math.max(1, point.count)) * 1.8 + (isSelected ? 2.5 : 0),
-            3,
-            14
-          );
+        {mapNodes.map((node) => {
+          if (node.kind === "instance") {
+            const point = node.point;
+            const isSelected = matchedPoint?.ip === point.ip;
+            const radius = clamp(
+              1.32 + Math.log2(Math.max(1, point.count)) * 0.3 + (isSelected ? 0.45 : 0),
+              0.9,
+              isSelected ? 4 : 3.1
+            );
 
-          const popupRows = [
-            { label: "Country", value: point.country },
-            ...(point.isp ? [{ label: "ISP", value: point.isp }] : []),
-            ...(point.asnName || point.asnNumber
-              ? [
-                  {
-                    label: "ASN",
-                    value:
-                      point.asnNumber && point.asnName
-                        ? `AS${point.asnNumber} ${point.asnName}`
-                        : point.asnNumber
-                          ? `AS${point.asnNumber}`
-                          : point.asnName ?? "N/A",
-                  },
-                ]
-              : []),
-            ...(point.organization ? [{ label: "Organization", value: point.organization }] : []),
-            { label: "Instances", value: point.instanceCount.toString() },
-            { label: "Hits", value: point.count.toString() },
-            { label: "Ports", value: point.portSummary || "N/A" },
-            { label: "Updated", value: generatedAtLabel },
-          ];
+            return (
+              <CircleMarker
+                key={node.key}
+                ref={(marker) => {
+                  if (marker) {
+                    markerRefs.current[node.key] = marker;
+                    return;
+                  }
+                  delete markerRefs.current[node.key];
+                }}
+                center={[point.lat, point.lon]}
+                radius={radius}
+                pathOptions={{
+                  className: cn("exposure-map-marker", isSelected && "is-selected"),
+                  stroke: false,
+                  fillColor: isSelected ? "var(--map-marker-selected-fill)" : "var(--map-marker-fill)",
+                  fillOpacity: isSelected ? 0.96 : 0.9,
+                }}
+              >
+                <Popup className="exposure-popup" closeButton={false}>
+                  <InstancePopupContent point={point} updatedAtLabel={updatedAtLabel} />
+                </Popup>
+              </CircleMarker>
+            );
+          }
+
+          const markerStyle = getClusterMarkerStyle(node);
+
+          const clusterRadius = getClusterMarkerRadius(node);
 
           return (
-            <CircleMarker
-              key={pointKey}
-              ref={(marker) => {
-                if (marker) {
-                  markerRefs.current[pointKey] = marker;
-                  return;
-                }
-                delete markerRefs.current[pointKey];
-              }}
-              center={[point.lat, point.lon]}
-              radius={radius}
-              pathOptions={{
-                color: isSelected ? "var(--map-marker-selected-stroke)" : "var(--map-marker-stroke)",
-                weight: isSelected ? 2 : 1,
-                fillColor: isSelected ? "var(--map-marker-selected-fill)" : "var(--map-marker-fill)",
-                fillOpacity: isSelected ? 0.95 : 0.82,
-              }}
-            >
-              <Popup className="exposure-popup" closeButton={false}>
-                <div className={informationLayout.popupContainer}>
-                  <div className={informationLayout.summaryRow}>
-                    <span className={informationText.rowLabel}>IP</span>
-                    <span className={cn(informationLayout.summaryValueWrap, informationText.rowValue)}>
-                      {point.ip}
-                    </span>
-                  </div>
-                  {popupRows.map((row) => (
-                    <div key={row.label} className={informationLayout.summaryRow}>
-                      <span className={informationText.rowLabel}>{row.label}</span>
-                      <span className={cn(informationLayout.summaryValueWrap, informationText.rowValue)}>
-                        {row.value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Popup>
-            </CircleMarker>
+            <Fragment key={node.key}>
+              <CircleMarker
+                center={[node.lat, node.lon]}
+                radius={getClusterRippleRadius(node, 1)}
+                interactive={false}
+                pathOptions={{
+                  className: "exposure-map-ripple exposure-map-ripple--primary",
+                  color: markerStyle.stroke,
+                  weight: CLUSTER_VISUAL_SPECS[node.kind].ripplePrimaryWeight,
+                  opacity: CLUSTER_VISUAL_SPECS[node.kind].ripplePrimaryOpacity,
+                  fillOpacity: 0,
+                }}
+              />
+              <CircleMarker
+                center={[node.lat, node.lon]}
+                radius={getClusterRippleRadius(node, 2)}
+                interactive={false}
+                pathOptions={{
+                  className: "exposure-map-ripple exposure-map-ripple--secondary",
+                  color: markerStyle.stroke,
+                  weight: CLUSTER_VISUAL_SPECS[node.kind].rippleSecondaryWeight,
+                  opacity: CLUSTER_VISUAL_SPECS[node.kind].rippleSecondaryOpacity,
+                  fillOpacity: 0,
+                }}
+              />
+              <CircleMarker
+                center={[node.lat, node.lon]}
+                radius={clusterRadius}
+                pathOptions={{
+                  className: "exposure-map-marker exposure-map-cluster",
+                  stroke: false,
+                  fillColor: markerStyle.fill,
+                  fillOpacity: markerStyle.fillOpacity,
+                }}
+              >
+                <Popup className="exposure-popup" closeButton={false}>
+                  <ClusterPopupContent node={node} updatedAtLabel={updatedAtLabel} />
+                </Popup>
+              </CircleMarker>
+            </Fragment>
           );
         })}
       </MapContainer>
