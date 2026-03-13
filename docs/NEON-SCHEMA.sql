@@ -3,6 +3,9 @@
 -- 更新时间：2026-03-11
 
 create extension if not exists pgcrypto;
+drop table if exists netlas_quota_drift_events;
+drop table if exists netlas_quota_calibrations;
+drop table if exists netlas_snapshots;
 
 -- 1) 密钥池
 create table if not exists netlas_keys (
@@ -141,22 +144,6 @@ alter table if exists netlas_hits drop constraint if exists chk_netlas_hits_lon_
 alter table if exists netlas_hits add constraint chk_netlas_hits_lon_valid check (longitude is null or (longitude >= -180 and longitude <= 180)) not valid;
 
 -- 5) 快照元数据
-create table if not exists netlas_snapshots (
-  id uuid primary key default gen_random_uuid(),
-  sync_job_id uuid references netlas_sync_jobs(id) on delete set null,
-  storage_type text not null default 'local_fs',
-  source_file text,
-  generated_at timestamptz,
-  total_records integer,
-  public_records integer,
-  plotted_points integer,
-  metadata jsonb,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists idx_netlas_snapshots_generated_at on netlas_snapshots (generated_at desc);
-create index if not exists idx_netlas_snapshots_job on netlas_snapshots (sync_job_id);
-
 -- 6) 日额度账本
 create table if not exists netlas_key_usage_daily (
   id uuid primary key default gen_random_uuid(),
@@ -185,50 +172,7 @@ create table if not exists netlas_key_usage_monthly (
 create index if not exists idx_usage_monthly_month on netlas_key_usage_monthly (usage_month);
 
 -- 8) 额度校准快照
-create table if not exists netlas_quota_calibrations (
-  id uuid primary key default gen_random_uuid(),
-  calibration_id text not null unique,
-  key_id text not null references netlas_keys(key_id) on delete cascade,
-  source text not null default 'pre_sync',
-  provider_daily_used integer,
-  provider_daily_remaining integer,
-  provider_monthly_used integer,
-  provider_monthly_remaining integer,
-  local_daily_used integer,
-  local_daily_remaining integer,
-  local_monthly_used integer,
-  local_monthly_remaining integer,
-  drift_daily integer,
-  drift_monthly integer,
-  drift_ratio numeric(8,4),
-  action_taken text,
-  snapshot jsonb,
-  calibrated_at timestamptz not null default now(),
-  created_at timestamptz not null default now()
-);
-
-create index if not exists idx_quota_calibrations_key_time on netlas_quota_calibrations (key_id, calibrated_at desc);
-create index if not exists idx_quota_calibrations_source on netlas_quota_calibrations (source);
-
 -- 9) 额度漂移事件
-create table if not exists netlas_quota_drift_events (
-  id uuid primary key default gen_random_uuid(),
-  drift_event_id text not null unique,
-  key_id text not null references netlas_keys(key_id) on delete cascade,
-  calibration_id text references netlas_quota_calibrations(calibration_id) on delete set null,
-  severity text not null,
-  drift_daily integer,
-  drift_monthly integer,
-  drift_ratio numeric(8,4),
-  threshold_ratio numeric(8,4),
-  resolution text,
-  resolved_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists idx_quota_drift_events_key_time on netlas_quota_drift_events (key_id, created_at desc);
-create index if not exists idx_quota_drift_events_severity on netlas_quota_drift_events (severity);
-
 -- 10) 通用字典表（配置与映射中心）
 create table if not exists app_dictionary (
   id uuid primary key default gen_random_uuid(),

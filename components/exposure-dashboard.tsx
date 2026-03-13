@@ -1,5 +1,7 @@
 "use client";
 
+import { Info } from "lucide-react";
+
 import { CountryExposureBarChart } from "@/components/country-exposure-bar-chart";
 import { ExposureMap } from "@/components/exposure-map";
 import { Button } from "@/components/ui/button";
@@ -9,7 +11,8 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatSnapshotDate } from "@/lib/datetime";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatSnapshotTime } from "@/lib/datetime";
 import type { ExposureSnapshot } from "@/lib/exposure-types";
 import { informationLayout, informationText } from "@/lib/ui-information";
 import { cn } from "@/lib/utils";
@@ -18,8 +21,32 @@ type ExposureDashboardProps = {
   snapshot: ExposureSnapshot;
 };
 
+const numberFormatter = new Intl.NumberFormat("en-US");
+
 export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
-  const generatedAtLabel = formatSnapshotDate(snapshot.generatedAt);
+  const generatedAtLabel = formatSnapshotTime(snapshot.generatedAt);
+  const summaryItems = [
+    {
+      title: "INSTANCES",
+      tip: "Unique publicly exposed instances.",
+      value: numberFormatter.format(snapshot.totalInstances),
+    },
+    {
+      title: "SEEN",
+      tip: "How many times matching assets were observed by scans.",
+      value: numberFormatter.format(snapshot.totalRecords),
+    },
+    {
+      title: "COUNTRIES",
+      tip: "Number of countries with observed exposure.",
+      value: numberFormatter.format(snapshot.countries.length),
+    },
+    {
+      title: "UPDATED",
+      tip: "Latest successful sync start time.",
+      value: generatedAtLabel,
+    },
+  ];
 
   return (
     <section className="h-full min-h-0">
@@ -36,26 +63,32 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
                     </TabsList>
 
                     <TabsContent value="summary" className="mt-3 overflow-auto">
-                      <div className={informationLayout.summaryList}>
-                        <div className={informationLayout.summaryRow}>
-                          <p className={informationText.rowLabel}>Total</p>
-                          <p className={informationText.rowValue}>{snapshot.totalInstances}</p>
+                      <TooltipProvider delayDuration={120}>
+                        <div className={informationLayout.summaryList}>
+                          {summaryItems.map((item) => (
+                            <div key={item.title} className={informationLayout.summaryRow}>
+                              <div className={informationLayout.summaryLabelWrap}>
+                                <p className={informationText.rowLabel}>{item.title}</p>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={informationLayout.summaryHelpTrigger}
+                                      aria-label={`More information about ${item.title}`}
+                                    >
+                                      <Info className="h-3 w-3" strokeWidth={1.9} />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">{item.tip}</TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <p className={cn(informationLayout.summaryValueWrap, informationText.rowValue)}>
+                                {item.value}
+                              </p>
+                            </div>
+                          ))}
                         </div>
-                        <div className={informationLayout.summaryRow}>
-                          <p className={informationText.rowLabel}>Hits</p>
-                          <p className={informationText.rowValue}>{snapshot.totalRecords}</p>
-                        </div>
-                        <div className={informationLayout.summaryRow}>
-                          <p className={informationText.rowLabel}>Countries</p>
-                          <p className={informationText.rowValue}>{snapshot.countries.length}</p>
-                        </div>
-                        <div className={informationLayout.summaryRow}>
-                          <p className={informationText.rowLabel}>Updated</p>
-                          <p className={cn(informationLayout.summaryValueWrap, informationText.rowValue)}>
-                            {generatedAtLabel}
-                          </p>
-                        </div>
-                      </div>
+                      </TooltipProvider>
                     </TabsContent>
 
                     <TabsContent value="notice" className="mt-3 overflow-auto">

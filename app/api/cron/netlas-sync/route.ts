@@ -74,6 +74,7 @@ export async function GET(request: Request) {
     const maxKeys = resolveRequestedMaxKeys(url);
     const maxPages = resolveCronMaxPages(url);
     const timeoutMs = resolveCronTimeoutMs(url);
+    const syncTriggeredAt = new Date().toISOString();
     const result = await runNetlasValidation({
       maxKeys,
       maxPages,
@@ -83,7 +84,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      trigger: "external-cron",
+      trigger: "sync-api",
+      triggeredAt: syncTriggeredAt,
       maxKeysRequested: maxKeys ?? null,
       maxPages,
       timeoutMs,

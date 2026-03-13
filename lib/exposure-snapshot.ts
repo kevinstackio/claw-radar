@@ -32,6 +32,10 @@ type DatabasePointRow = {
   last_seen_at: string | Date | null;
 };
 
+type SyncJobRow = {
+  started_at: string | Date | null;
+};
+
 const DATABASE_SOURCE_FILE = "database:netlas_hits";
 
 const globalForPg = globalThis as typeof globalThis & {
@@ -175,8 +179,41 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
   }));
 }
 
+async function loadLastSuccessfulSyncStartedAt(pool: Pool): Promise<string | null> {
+  try {
+    const result = await pool.query<SyncJobRow>(
+      `
+        select started_at
+        from netlas_sync_jobs
+        where final_status = 'ok'
+        order by started_at desc
+        limit 1
+      `
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const startedAt = result.rows[0]?.started_at;
+    if (!startedAt) {
+      return null;
+    }
+
+    const date = new Date(startedAt);
+    return Number.isNaN(date.getTime()) ? String(startedAt) : date.toISOString();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/relation "netlas_sync_jobs" does not exist/i.test(message)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapshot> {
   const pool = getDatabasePool();
+  const lastSuccessfulSyncStartedAt = await loadLastSuccessfulSyncStartedAt(pool);
   let usedLegacyAggregation = false;
   let result;
 
@@ -240,7 +277,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
 
   if (result.rowCount === 0) {
     return {
-      generatedAt: null,
+      generatedAt: lastSuccessfulSyncStartedAt,
       sourceFile: DATABASE_SOURCE_FILE,
       totalInstances: 0,
       totalRecords: 0,
@@ -338,7 +375,8 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
   const countries = toCountrySeries(countryCounts);
 
   return {
-    generatedAt: generatedAtEpochMs > 0 ? new Date(generatedAtEpochMs).toISOString() : null,
+    generatedAt:
+      lastSuccessfulSyncStartedAt ?? (generatedAtEpochMs > 0 ? new Date(generatedAtEpochMs).toISOString() : null),
     sourceFile: DATABASE_SOURCE_FILE,
     totalInstances,
     totalRecords: publicRecords,
