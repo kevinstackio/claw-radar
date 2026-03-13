@@ -30,6 +30,12 @@ type CountEntry = {
   value: number;
 };
 
+type CityAnchorCandidate = {
+  label: string;
+  instanceCount: number;
+  seenCount: number;
+};
+
 type AggregateBucket = {
   key: string;
   kind: ClusterKind;
@@ -39,14 +45,13 @@ type AggregateBucket = {
   latWeighted: number;
   lonWeighted: number;
   weightTotal: number;
-  latMin: number;
-  latMax: number;
-  lonMin: number;
-  lonMax: number;
+  cityAnchorCandidates: Map<string, CityAnchorCandidate>;
+  anchorCityKey: string | null;
   anchorLat: number | null;
   anchorLon: number | null;
-  anchorDistance: number;
-  anchorWeight: number;
+  anchorInstanceCount: number;
+  anchorSeenCount: number;
+  anchorIp: string | null;
   instanceCount: number;
   seenCount: number;
   pointCount: number;
@@ -159,6 +164,14 @@ function normalizeCityName(value: string | null | undefined) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function getCityAnchorLabel(value: string | null | undefined) {
+  return normalizeCityName(value) ?? "Unknown";
+}
+
+function getCityAnchorKey(value: string | null | undefined) {
+  return getCityAnchorLabel(value).toLowerCase();
+}
+
 function addCount(map: Map<string, number>, key: string | null | undefined, value: number) {
   const normalizedKey = String(key ?? "").trim();
   if (!normalizedKey) {
@@ -201,14 +214,13 @@ function createBucket(
     latWeighted: 0,
     lonWeighted: 0,
     weightTotal: 0,
-    latMin: Number.POSITIVE_INFINITY,
-    latMax: Number.NEGATIVE_INFINITY,
-    lonMin: Number.POSITIVE_INFINITY,
-    lonMax: Number.NEGATIVE_INFINITY,
+    cityAnchorCandidates: new Map(),
+    anchorCityKey: null,
     anchorLat: null,
     anchorLon: null,
-    anchorDistance: Number.POSITIVE_INFINITY,
-    anchorWeight: 0,
+    anchorInstanceCount: -1,
+    anchorSeenCount: -1,
+    anchorIp: null,
     instanceCount: 0,
     seenCount: 0,
     pointCount: 0,
@@ -224,10 +236,6 @@ function accumulateBucket(bucket: AggregateBucket, point: PlottedPoint) {
   bucket.latWeighted += point.lat * weight;
   bucket.lonWeighted += point.lon * weight;
   bucket.weightTotal += weight;
-  bucket.latMin = Math.min(bucket.latMin, point.lat);
-  bucket.latMax = Math.max(bucket.latMax, point.lat);
-  bucket.lonMin = Math.min(bucket.lonMin, point.lon);
-  bucket.lonMax = Math.max(bucket.lonMax, point.lon);
   bucket.instanceCount += point.instanceCount;
   bucket.seenCount += point.count;
   bucket.pointCount += 1;
@@ -235,6 +243,18 @@ function accumulateBucket(bucket: AggregateBucket, point: PlottedPoint) {
   addCount(bucket.countries, point.country, point.count);
   addCount(bucket.cities, normalizeCityName(point.city), point.count);
   collectPorts(point.portSummary, point.count, bucket.ports);
+
+  if (bucket.kind === "global") {
+    const cityKey = getCityAnchorKey(point.city);
+    const cityCandidate = bucket.cityAnchorCandidates.get(cityKey) ?? {
+      label: getCityAnchorLabel(point.city),
+      instanceCount: 0,
+      seenCount: 0,
+    };
+    cityCandidate.instanceCount += point.instanceCount;
+    cityCandidate.seenCount += point.count;
+    bucket.cityAnchorCandidates.set(cityKey, cityCandidate);
+  }
 
   const organizationLabel =
     point.organization ??
@@ -249,35 +269,49 @@ function accumulateBucket(bucket: AggregateBucket, point: PlottedPoint) {
   addCount(bucket.organizations, organizationLabel, point.count);
 }
 
-function getGlobalAnchorTarget(bucket: AggregateBucket) {
-  return {
-    lat: (bucket.latMin + bucket.latMax) / 2,
-    lon: (bucket.lonMin + bucket.lonMax) / 2,
-  };
+function selectGlobalAnchorCities(buckets: Map<string, AggregateBucket>) {
+  for (const bucket of buckets.values()) {
+    const selected = [...bucket.cityAnchorCandidates.entries()].sort((a, b) => {
+      if (b[1].instanceCount !== a[1].instanceCount) {
+        return b[1].instanceCount - a[1].instanceCount;
+      }
+
+      if (b[1].seenCount !== a[1].seenCount) {
+        return b[1].seenCount - a[1].seenCount;
+      }
+
+      return a[1].label.localeCompare(b[1].label);
+    })[0];
+
+    if (!selected) {
+      continue;
+    }
+
+    bucket.anchorCityKey = selected[0];
+    bucket.city = selected[1].label;
+  }
 }
 
 function attachGlobalAnchors(buckets: Map<string, AggregateBucket>, points: PlottedPoint[]) {
   for (const point of points) {
     const country = point.country || "Unknown";
     const bucket = buckets.get(`global-country:${country}`);
-    if (!bucket || !Number.isFinite(bucket.latMin) || !Number.isFinite(bucket.lonMin)) {
+    if (!bucket || bucket.anchorCityKey === null || getCityAnchorKey(point.city) !== bucket.anchorCityKey) {
       continue;
     }
 
-    const target = getGlobalAnchorTarget(bucket);
-    const latDelta = point.lat - target.lat;
-    const lonDelta = point.lon - target.lon;
-    const distance = latDelta * latDelta + lonDelta * lonDelta;
-    const anchorWeight = Math.max(point.instanceCount, point.count, 1);
-
     if (
-      distance < bucket.anchorDistance ||
-      (Math.abs(distance - bucket.anchorDistance) < 0.000001 && anchorWeight > bucket.anchorWeight)
+      point.instanceCount > bucket.anchorInstanceCount ||
+      (point.instanceCount === bucket.anchorInstanceCount && point.count > bucket.anchorSeenCount) ||
+      (point.instanceCount === bucket.anchorInstanceCount &&
+        point.count === bucket.anchorSeenCount &&
+        (bucket.anchorIp === null || point.ip.localeCompare(bucket.anchorIp) < 0))
     ) {
       bucket.anchorLat = point.lat;
       bucket.anchorLon = point.lon;
-      bucket.anchorDistance = distance;
-      bucket.anchorWeight = anchorWeight;
+      bucket.anchorInstanceCount = point.instanceCount;
+      bucket.anchorSeenCount = point.count;
+      bucket.anchorIp = point.ip;
     }
   }
 }
@@ -337,6 +371,7 @@ function buildGlobalNodes(points: PlottedPoint[]): ClusterNode[] {
     buckets.set(key, bucket);
   }
 
+  selectGlobalAnchorCities(buckets);
   attachGlobalAnchors(buckets, points);
 
   return finalizeBuckets(buckets);
@@ -457,7 +492,7 @@ function ClusterPopupContent({
         : node.city ?? node.label;
   const subtitle =
     node.kind === "global"
-      ? `Zoom ${MAP_LAYER_ZOOM_RANGES.global.min}-${MAP_LAYER_ZOOM_RANGES.global.max} country anchor`
+      ? `Zoom ${MAP_LAYER_ZOOM_RANGES.global.min}-${MAP_LAYER_ZOOM_RANGES.global.max} hotspot anchor`
       : node.kind === "country"
         ? "Country / region aggregate"
         : node.country
@@ -468,6 +503,7 @@ function ClusterPopupContent({
     node.kind === "global"
       ? [
           { label: "Country", value: node.country ?? "Unknown" },
+          { label: "Anchor City", value: node.city ?? "Unknown" },
           { label: "Cities", value: node.cityCount.toString() },
           { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
           { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
