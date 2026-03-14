@@ -1,5 +1,3 @@
-export const IP_SEARCH_EVENT = "clawradar:ip-search";
-
 export type IpSearchStatus = "matched" | "not_found" | "invalid" | "error";
 
 export type IpSearchPoint = {

@@ -4,10 +4,7 @@ import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  IP_SEARCH_EVENT,
-  type IpSearchResult,
-} from "@/lib/ip-search";
+import type { IpSearchResult } from "@/lib/ip-search";
 import {
   getIpSearchToastLevel,
   showLeveledToast,
@@ -38,12 +35,6 @@ export function HeaderIpSearch() {
       if (level) {
         showLeveledToast(level, result.message, TOAST_IDS.ipSearchFeedback);
       }
-
-      window.dispatchEvent(
-        new CustomEvent(IP_SEARCH_EVENT, {
-          detail: result,
-        })
-      );
     } catch {
       const fallback: IpSearchResult = {
         status: "error",
@@ -52,11 +43,6 @@ export function HeaderIpSearch() {
         point: null,
       };
       showLeveledToast("error", fallback.message, TOAST_IDS.ipSearchFeedback);
-      window.dispatchEvent(
-        new CustomEvent(IP_SEARCH_EVENT, {
-          detail: fallback,
-        })
-      );
     } finally {
       setIsLoading(false);
     }

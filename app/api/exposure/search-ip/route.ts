@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json<IpSearchResult>({
       status: "matched",
       ip,
-      message: `已匹配到 IP ${ip}，地图已定位并高亮该点位。`,
+      message: `已匹配到 IP ${ip}。`,
       point: {
         ip: matchedPoint.ip,
         country: matchedPoint.country,

@@ -19,10 +19,6 @@ export const informationLayout = {
   noticeBlock: "space-y-3",
   sectionTitle: "text-sm font-semibold text-foreground",
   sectionSubtitle: "text-[11px] text-muted-foreground",
-  popupContainer: "flex min-w-[248px] flex-col gap-2 p-1",
-  popupRow: "flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2",
-  popupLabel: "text-[11px] uppercase tracking-wide text-muted-foreground",
-  popupValue: "max-w-[58%] truncate text-right text-sm font-medium text-foreground",
 };
 
 export const informationChart = {
