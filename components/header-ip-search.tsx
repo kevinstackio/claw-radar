@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { IpSearchResult } from "@/lib/ip-search";
+import { dispatchIpSearchFocus, type IpSearchResult } from "@/lib/ip-search";
 import {
   getIpSearchToastLevel,
   showLeveledToast,
@@ -34,6 +34,10 @@ export function HeaderIpSearch() {
       const level = getIpSearchToastLevel(result.status);
       if (level) {
         showLeveledToast(level, result.message, TOAST_IDS.ipSearchFeedback);
+      }
+
+      if (result.status === "matched" && result.point) {
+        dispatchIpSearchFocus(result.point);
       }
     } catch {
       const fallback: IpSearchResult = {

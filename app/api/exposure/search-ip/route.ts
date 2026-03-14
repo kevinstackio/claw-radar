@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         portSummary: matchedPoint.portSummary,
         latitude,
         longitude,
-        updatedAt: snapshot.generatedAt,
+        updatedAt: matchedPoint.updatedAt,
       },
     });
   } catch {

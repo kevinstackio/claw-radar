@@ -14,6 +14,7 @@ type MutablePoint = {
   asnNumber: string | null;
   organization: string | null;
   instanceCount: number;
+  protocols: Set<string>;
   ports: Set<number>;
 };
 
@@ -27,6 +28,7 @@ type DatabasePointRow = {
   asn_name: string | null;
   asn_number: string | null;
   organization: string | null;
+  protocols: unknown;
   ports: unknown;
   last_seen_at: string | Date | null;
 };
@@ -159,6 +161,22 @@ function normalizePortList(value: unknown): number[] {
   return [];
 }
 
+function normalizeTextList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return [...new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : String(item ?? "").trim()).toLowerCase())
+        .filter((item) => item.length > 0)
+    )].sort((a, b) => a.localeCompare(b));
+  }
+
+  if (typeof value === "string" && value.startsWith("{") && value.endsWith("}")) {
+    return normalizeTextList(value.slice(1, -1).split(","));
+  }
+
+  return [];
+}
+
 function toCountrySeries(countryCounts: Map<string, number>): CountryExposure[] {
   return [...countryCounts.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
@@ -169,11 +187,13 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
     ip: point.ip,
     country: point.country || "Unknown",
     city: point.city,
+    protocolSummary: [...point.protocols].sort((a, b) => a.localeCompare(b)).join(", "),
     portSummary: [...point.ports].sort((a, b) => a - b).join(", "),
     isp: point.isp,
     asnName: point.asnName,
     asnNumber: point.asnNumber,
     organization: point.organization,
+    updatedAt: point.latestSeenAtEpochMs > 0 ? new Date(point.latestSeenAtEpochMs).toISOString() : null,
     instanceCount: point.instanceCount,
     value: [point.longitude, point.latitude, point.instanceCount],
   }));
@@ -223,6 +243,7 @@ async function queryInstanceRows(pool: Pool) {
       nullif(asn_name, '') as asn_name,
       nullif(asn_number, '') as asn_number,
       nullif(organization, '') as organization,
+      protocols,
       ports,
       last_seen_at
     from netlas_instances
@@ -244,6 +265,7 @@ async function queryLegacyHitRows(pool: Pool) {
       (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '') order by last_seen_at desc), null))[1] as asn_name,
       (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '') order by last_seen_at desc), null))[1] as asn_number,
       (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '') order by last_seen_at desc), null))[1] as organization,
+      '{}'::text[] as protocols,
       array_remove(array_agg(distinct port order by port), null) as ports,
       max(last_seen_at) as last_seen_at
     from netlas_hits
@@ -315,6 +337,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
 
     const country = String(row.country ?? "Unknown").trim() || "Unknown";
     const city = normalizeOptionalText(row.city);
+    const protocols = normalizeTextList(row.protocols);
     const ports = normalizePortList(row.ports);
     const rowLastSeenEpochMs = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
     const isp = normalizeOptionalText(row.isp);
@@ -328,6 +351,10 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     const key = ip;
     const existing = pointMap.get(key);
     if (existing) {
+      for (const protocol of protocols) {
+        existing.protocols.add(protocol);
+      }
+
       for (const port of ports) {
         existing.ports.add(port);
       }
@@ -361,6 +388,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
         asnNumber,
         organization,
         instanceCount: 1,
+        protocols: new Set(protocols),
         ports: new Set(ports),
       });
     }

@@ -1,5 +1,7 @@
 export type IpSearchStatus = "matched" | "not_found" | "invalid" | "error";
 
+export const IP_SEARCH_FOCUS_EVENT = "exposure:ip-search-focus";
+
 export type IpSearchPoint = {
   ip: string;
   country: string;
@@ -15,6 +17,18 @@ export type IpSearchResult = {
   message: string;
   point: IpSearchPoint | null;
 };
+
+export function dispatchIpSearchFocus(point: IpSearchPoint) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<IpSearchPoint>(IP_SEARCH_FOCUS_EVENT, {
+      detail: point,
+    })
+  );
+}
 
 export function isValidIpv4(value: string) {
   const parts = value.split(".");

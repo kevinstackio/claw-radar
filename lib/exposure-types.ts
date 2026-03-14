@@ -8,11 +8,13 @@ export type ExposurePoint = {
   ip: string;
   country: string;
   city: string | null;
+  protocolSummary: string;
   portSummary: string;
   isp: string | null;
   asnName: string | null;
   asnNumber: string | null;
   organization: string | null;
+  updatedAt: string | null;
   instanceCount: number;
   value: [number, number, number];
 };

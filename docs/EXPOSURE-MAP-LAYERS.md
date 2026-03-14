@@ -22,9 +22,11 @@
 - Once the user zooms beyond world view, the map renders all valid `🦞` instance points directly.
 - Country, regional, and detail view do not do province aggregation.
 - `🦞` marker size is `12` in world view and `16` in country/regional/detail view.
-- The map does not render popups, ripple effects, or world-view rotation logic.
+- From country view (`zoom >= 4`) onward, clicking a `🦞` opens a wider popup with `IP`, `Country`, `ISP`, `Protocol`, `Port`, and `Updated`.
+- The popup masks the middle of the IP by default and includes a copy icon for the real IP.
+- The map does not render ripple effects.
 - Zooming and panning remain available as plain map navigation.
-- IP search no longer drives map focus or popup state.
+- IP search flies the map to the matched instance and opens its popup.
 
 ## Implementation
 
