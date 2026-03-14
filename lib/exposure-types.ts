@@ -13,14 +13,14 @@ export type ExposurePoint = {
   asnName: string | null;
   asnNumber: string | null;
   organization: string | null;
-  ipCount: number;
+  instanceCount: number;
   value: [number, number, number];
 };
 
 export type ExposureSnapshot = {
   generatedAt: string | null;
   sourceFile: string | null;
-  totalIps: number;
+  totalInstances: number;
   countries: CountryExposure[];
   points: ExposurePoint[];
   note: string | null;

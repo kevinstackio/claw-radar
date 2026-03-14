@@ -11,7 +11,7 @@ ClawRadar 是一个基于 Next.js 的可视化项目，用于展示全球范围�
 - 全球暴露点位地图展示（Leaflet）
 - 国家维度暴露分布图（饼图/柱状图切换）
 - 头部 IP 搜索（`POST /api/exposure/search-ip`）
-- 数据库聚合读取与展示（按唯一公网 IP 聚合，Neon/Postgres）
+- 数据库聚合读取与展示（按唯一公网 IP 作为实例聚合，Neon/Postgres）
 - 主题切换（Light/Dark）
 
 ## 技术栈
@@ -76,6 +76,7 @@ pnpm dev
 - `pnpm format:check`：格式规则检查（基于 ESLint）
 - `pnpm verify`：完整校验（format + lint + build）
 - `pnpm netlas:fetch`：调用 Netlas API 拉取并落盘本地快照
+- `pnpm netlas:migrate-instances`：只执行数据库实例表迁移，不消耗 Netlas 请求配额
 - `pnpm netlas:validate`：执行 Netlas 同步并写入 Neon
 
 ## Git Hook（推荐）
@@ -94,7 +95,7 @@ git config core.hooksPath .githooks
 ## 数据流说明
 
 1. `scripts/validate-netlas-neon.mjs` 从 Netlas API 拉取数据并写入 Neon。
-2. `lib/exposure-snapshot.ts` 在服务端读取 `netlas_hits` 聚合结果，按唯一公网 IP 完成清洗、国家聚合与地图点位转换。
+2. `lib/exposure-snapshot.ts` 在服务端读取 `netlas_instances` 聚合结果，按唯一公网 IP 实例完成清洗、国家聚合与地图点位转换。
 3. 首页 `app/page.tsx` 将快照传入仪表盘组件，地图和图表共享同一份快照数据。
 4. IP 搜索通过 `POST /api/exposure/search-ip` 在当前快照中匹配，前端收到结果后触发地图定位与高亮。
 

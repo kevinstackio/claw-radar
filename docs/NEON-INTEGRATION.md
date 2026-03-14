@@ -8,7 +8,7 @@
 - 日/月额度账本
 - 请求级别落库与状态结算
 - 同步任务运行日志
-- 原始响应与命中明细全量留痕
+- 原始响应全量留痕与实例级结构化汇总
 - 同步前额度校准与冗余控制
 
 说明：这是项目集成文档，不是注册教程。
@@ -20,7 +20,7 @@ Neon 负责存储“可追溯运行状态”，包括：
 - 密钥状态、限额、健康度
 - 请求生命周期（`pending -> ok/timeout/unknown/...`）
 - 每次同步任务的计划、执行与结果
-- 资产明细记录（结构化字段 + 原始 `raw_hit`）
+- 实例明细记录（结构化字段，按唯一公网 IP 聚合）
 - 额度校准快照与漂移记录
 
 本地快照文件（`data/backups/exposure/...`）可保留用于离线核对；当前仪表盘在线路径走数据库聚合。
@@ -42,7 +42,7 @@ NETLAS_ENCRYPTION_KEY=<strong-random-secret>
 - `netlas_keys`：密钥池（仅存密文，不存明文）
 - `netlas_sync_jobs`：同步任务主记录
 - `netlas_requests`：上游请求级明细（含响应体）
-- `netlas_hits`：逐条资产记录（含 `raw_hit`）
+- `netlas_instances`：实例级聚合记录（每个唯一公网 IP 一行）
 - `netlas_snapshots`：本地快照元数据
 - `netlas_key_usage_daily`：日用量
 - `netlas_key_usage_monthly`：月用量
@@ -64,10 +64,11 @@ NETLAS_ENCRYPTION_KEY=<strong-random-secret>
 - `request_id`、`key_id`、`endpoint`、`start_offset`、`status`、`http_status`、`duration_ms`
 - `response_headers`、`response_body(jsonb)`、`response_body_text`
 
-资产级：
+实例级：
 
-- `request_id`、`netlas_item_index`、`ip`、`port`、地理字段
-- `raw_hit(jsonb)`（用于完整还原）
+- `request_id`、`ip`、`ports[]`、`protocols[]`、地理字段
+- `country/city/ISP/ASN` 等结构化字段来自官方响应提取
+- 官方原始响应保留在 `netlas_requests.response_body(jsonb)`
 
 额度级：
 

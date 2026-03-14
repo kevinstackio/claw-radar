@@ -30,7 +30,7 @@ type PieTooltipPayloadItem = {
 };
 
 const barChartConfig = {
-  ips: {
+  instances: {
     label: "Instances",
     color: "var(--chart-1)",
   },
@@ -134,7 +134,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   }, [countries]);
 
   const barData = useMemo(
-    () => countries.map((item) => ({ country: item.name, ips: item.value })),
+    () => countries.map((item) => ({ country: item.name, instances: item.value })),
     [countries]
   );
 
@@ -227,7 +227,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               tick={{ fontSize: informationChart.axisFontSize, fill: "var(--color-muted-foreground)" }}
             />
             <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-            <Bar dataKey="ips" fill="var(--color-ips)" radius={informationChart.barRadius} />
+            <Bar dataKey="instances" fill="var(--color-instances)" radius={informationChart.barRadius} />
           </BarChart>
         </ChartContainer>
       )}

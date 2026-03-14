@@ -8,10 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:netlas-core": "node --test test/netlas-sync-core.test.mjs",
+    "test:netlas-core": "node --test test/netlas-sync-core.test.mjs test/netlas-instance-sync.test.mjs",
     "format:check": "eslint . --fix-dry-run --max-warnings=0",
     "verify": "pnpm format:check && pnpm lint && pnpm build",
     "netlas:fetch": "node --env-file=.env.local scripts/fetch-netlas-openclaw.mjs",
+    "netlas:migrate-instances": "node --env-file=.env.local -e \"import('./scripts/validate-netlas-neon.mjs').then(async (m) => { const result = await m.migrateNetlasInstanceSchema(); console.log(JSON.stringify(result)); }).catch((error) => { console.error(error.message); process.exit(1); })\"",
     "netlas:validate": "node --env-file=.env.local scripts/validate-netlas-neon.mjs"
   },
   "dependencies": {

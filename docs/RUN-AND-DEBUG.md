@@ -21,10 +21,10 @@
 
 ## 本地无数据的核心原因
 
-当前页面读取数据库聚合（`netlas_hits`），常见无数据原因：
+当前页面读取数据库聚合（`netlas_instances`），常见无数据原因：
 
 - `DATABASE_URL` 配置错误或连接失败。
-- 从未执行过同步任务（表存在但没有命中数据）。
+- 从未执行过同步任务（表存在但没有实例数据）。
 - 同步任务失败（可在 `netlas_sync_jobs` / `netlas_requests` 查看状态）。
 
 ## 恢复数据展示
@@ -49,6 +49,7 @@ pnpm netlas:validate
 
 - 本地预览：`pnpm dev`
 - 本地抓取：`pnpm netlas:fetch`
+- 只迁移实例表：`pnpm netlas:migrate-instances`
 - Neon 写库同步：`pnpm netlas:validate`
 
 

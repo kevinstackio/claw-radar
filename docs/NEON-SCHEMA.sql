@@ -88,8 +88,8 @@ create index if not exists idx_netlas_requests_started_at on netlas_requests (st
 create index if not exists idx_netlas_requests_key_status on netlas_requests (key_id, status);
 create index if not exists idx_netlas_requests_job on netlas_requests (sync_job_id);
 
--- 4) 资产明细（全局去重）
-create table if not exists netlas_hits (
+-- 4) 实例明细（按唯一公网 IP 去重）
+create table if not exists netlas_instances (
   id uuid primary key default gen_random_uuid(),
   sync_job_id uuid references netlas_sync_jobs(id) on delete set null,
   request_id text references netlas_requests(request_id) on delete set null,
@@ -97,50 +97,62 @@ create table if not exists netlas_hits (
   provider text not null default 'netlas',
   query text,
   query_hash text,
-  netlas_item_index integer,
-  netlas_item_id text,
-  hit_hash text,
-  asset_key text,
-  ip inet,
-  port integer,
-  transport text,
-  protocol text,
-  country text,
+  ip inet not null,
+  ports integer[] not null default '{}'::integer[],
+  transports text[] not null default '{}'::text[],
+  protocols text[] not null default '{}'::text[],
+  netlas_item_ids text[] not null default '{}'::text[],
+  country text not null default 'Unknown',
   country_code text,
   city text,
   latitude double precision,
   longitude double precision,
-  observed_at timestamptz,
+  isp text,
+  asn_name text,
+  asn_number text,
+  organization text,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
-  raw_hit jsonb not null,
   created_at timestamptz not null default now()
 );
 
--- 历史兼容迁移（老表补列）
-alter table if exists netlas_hits add column if not exists hit_hash text;
-alter table if exists netlas_hits add column if not exists asset_key text;
-alter table if exists netlas_hits add column if not exists first_seen_at timestamptz not null default now();
-alter table if exists netlas_hits add column if not exists last_seen_at timestamptz not null default now();
-alter table if exists netlas_hits drop column if exists seen_count;
+-- 历史兼容迁移（新表补列 / 旧列清理）
+alter table if exists netlas_instances add column if not exists ports integer[] not null default '{}'::integer[];
+alter table if exists netlas_instances add column if not exists transports text[] not null default '{}'::text[];
+alter table if exists netlas_instances add column if not exists protocols text[] not null default '{}'::text[];
+alter table if exists netlas_instances add column if not exists netlas_item_ids text[] not null default '{}'::text[];
+alter table if exists netlas_instances add column if not exists isp text;
+alter table if exists netlas_instances add column if not exists asn_name text;
+alter table if exists netlas_instances add column if not exists asn_number text;
+alter table if exists netlas_instances add column if not exists organization text;
+alter table if exists netlas_instances add column if not exists first_seen_at timestamptz not null default now();
+alter table if exists netlas_instances add column if not exists last_seen_at timestamptz not null default now();
+alter table if exists netlas_instances drop column if exists seen_count;
+alter table if exists netlas_instances drop column if exists total_hits;
+alter table if exists netlas_instances drop column if exists deduped_hits;
+alter table if exists netlas_instances drop column if exists netlas_item_index;
+alter table if exists netlas_instances drop column if exists netlas_item_id;
+alter table if exists netlas_instances drop column if exists hit_hash;
+alter table if exists netlas_instances drop column if exists asset_key;
+alter table if exists netlas_instances drop column if exists port;
+alter table if exists netlas_instances drop column if exists transport;
+alter table if exists netlas_instances drop column if exists protocol;
+alter table if exists netlas_instances drop column if exists observed_at;
+alter table if exists netlas_instances drop column if exists raw_hit;
 
-create index if not exists idx_netlas_hits_ip on netlas_hits (ip);
-create index if not exists idx_netlas_hits_port on netlas_hits (port);
-create index if not exists idx_netlas_hits_job on netlas_hits (sync_job_id);
-create index if not exists idx_netlas_hits_created_at on netlas_hits (created_at desc);
-create index if not exists idx_netlas_hits_query_hash on netlas_hits (query_hash);
-create index if not exists idx_netlas_hits_hash on netlas_hits (hit_hash);
+create index if not exists idx_netlas_instances_job on netlas_instances (sync_job_id);
+create index if not exists idx_netlas_instances_created_at on netlas_instances (created_at desc);
+create index if not exists idx_netlas_instances_last_seen_at on netlas_instances (last_seen_at desc);
+create index if not exists idx_netlas_instances_query_hash on netlas_instances (query_hash);
 
--- 关键：全局唯一去重
-create unique index if not exists uq_netlas_hits_hit_hash on netlas_hits (hit_hash) where hit_hash is not null;
+-- 关键：全局唯一去重按公网 IP
+create unique index if not exists uq_netlas_instances_ip on netlas_instances (ip);
 
 -- 数据质量约束（允许现有脏数据先不校验，后续逐步清理）
-alter table if exists netlas_hits drop constraint if exists chk_netlas_hits_port_valid;
-alter table if exists netlas_hits add constraint chk_netlas_hits_port_valid check (port is null or (port >= 1 and port <= 65535)) not valid;
-alter table if exists netlas_hits drop constraint if exists chk_netlas_hits_lat_valid;
-alter table if exists netlas_hits add constraint chk_netlas_hits_lat_valid check (latitude is null or (latitude >= -90 and latitude <= 90)) not valid;
-alter table if exists netlas_hits drop constraint if exists chk_netlas_hits_lon_valid;
-alter table if exists netlas_hits add constraint chk_netlas_hits_lon_valid check (longitude is null or (longitude >= -180 and longitude <= 180)) not valid;
+alter table if exists netlas_instances drop constraint if exists chk_netlas_instances_lat_valid;
+alter table if exists netlas_instances add constraint chk_netlas_instances_lat_valid check (latitude is null or (latitude >= -90 and latitude <= 90)) not valid;
+alter table if exists netlas_instances drop constraint if exists chk_netlas_instances_lon_valid;
+alter table if exists netlas_instances add constraint chk_netlas_instances_lon_valid check (longitude is null or (longitude >= -180 and longitude <= 180)) not valid;
 
 -- 5) 快照元数据
 -- 6) 日额度账本

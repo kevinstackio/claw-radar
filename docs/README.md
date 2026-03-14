@@ -25,7 +25,7 @@
 - 生产定时相关变量优先看 `GITHUB-CRON-SETUP.md` 的“必配项总表”。
 
 - [PRODUCTION-DEPLOY.md](PRODUCTION-DEPLOY.md): Production-only deployment and local-vs-production runtime notes.
-- [EXPOSURE-MAP-LAYERS.md](EXPOSURE-MAP-LAYERS.md): Exposure map zoom layers, popup content contract, and frozen global-layer style.
+- [EXPOSURE-MAP-LAYERS.md](EXPOSURE-MAP-LAYERS.md): Exposure map point-rendering behavior and popup content contract.
 
 ## Milestone Validation
 - [MILESTONE-VALIDATION.md](MILESTONE-VALIDATION.md): Milestone validation SOP and required report template.

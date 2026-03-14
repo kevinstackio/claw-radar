@@ -13,7 +13,7 @@ type MutablePoint = {
   asnName: string | null;
   asnNumber: string | null;
   organization: string | null;
-  ipCount: number;
+  instanceCount: number;
   ports: Set<number>;
 };
 
@@ -35,7 +35,8 @@ type SyncJobRow = {
   started_at: string | Date | null;
 };
 
-const DATABASE_SOURCE_FILE = "database:netlas_hits";
+const DATABASE_SOURCE_FILE = "database:netlas_instances";
+const LEGACY_DATABASE_SOURCE_FILE = "database:netlas_hits";
 
 const globalForPg = globalThis as typeof globalThis & {
   __clawRadarPool?: Pool;
@@ -173,8 +174,8 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
     asnName: point.asnName,
     asnNumber: point.asnNumber,
     organization: point.organization,
-    ipCount: point.ipCount,
-    value: [point.longitude, point.latitude, point.ipCount],
+    instanceCount: point.instanceCount,
+    value: [point.longitude, point.latitude, point.instanceCount],
   }));
 }
 
@@ -210,82 +211,94 @@ async function loadLastSuccessfulSyncStartedAt(pool: Pool): Promise<string | nul
   }
 }
 
+async function queryInstanceRows(pool: Pool) {
+  return pool.query<DatabasePointRow>(`
+    select
+      host(ip) as ip,
+      coalesce(nullif(country, ''), 'Unknown') as country,
+      nullif(city, '') as city,
+      latitude,
+      longitude,
+      nullif(isp, '') as isp,
+      nullif(asn_name, '') as asn_name,
+      nullif(asn_number, '') as asn_number,
+      nullif(organization, '') as organization,
+      ports,
+      last_seen_at
+    from netlas_instances
+    where ip is not null
+      and latitude is not null
+      and longitude is not null
+  `);
+}
+
+async function queryLegacyHitRows(pool: Pool) {
+  return pool.query<DatabasePointRow>(`
+    select
+      host(ip) as ip,
+      (array_remove(array_agg(nullif(city, '') order by last_seen_at desc), null))[1] as city,
+      coalesce((array_remove(array_agg(nullif(country, '') order by last_seen_at desc), null))[1], 'Unknown') as country,
+      (array_remove(array_agg(latitude order by last_seen_at desc), null))[1] as latitude,
+      (array_remove(array_agg(longitude order by last_seen_at desc), null))[1] as longitude,
+      (array_remove(array_agg(nullif(raw_hit->'data'->>'isp', '') order by last_seen_at desc), null))[1] as isp,
+      (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '') order by last_seen_at desc), null))[1] as asn_name,
+      (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '') order by last_seen_at desc), null))[1] as asn_number,
+      (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '') order by last_seen_at desc), null))[1] as organization,
+      array_remove(array_agg(distinct port order by port), null) as ports,
+      max(last_seen_at) as last_seen_at
+    from netlas_hits
+    where ip is not null
+      and latitude is not null
+      and longitude is not null
+    group by host(ip)
+  `);
+}
+
 async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapshot> {
   const pool = getDatabasePool();
   const lastSuccessfulSyncStartedAt = await loadLastSuccessfulSyncStartedAt(pool);
   let usedLegacyAggregation = false;
   let result;
+  let sourceFile = DATABASE_SOURCE_FILE;
 
   try {
-    result = await pool.query<DatabasePointRow>(`
-      select
-        host(ip) as ip,
-        (array_remove(array_agg(nullif(city, '') order by last_seen_at desc), null))[1] as city,
-        coalesce((array_remove(array_agg(nullif(country, '') order by last_seen_at desc), null))[1], 'Unknown') as country,
-        (array_remove(array_agg(latitude order by last_seen_at desc), null))[1] as latitude,
-        (array_remove(array_agg(longitude order by last_seen_at desc), null))[1] as longitude,
-        (array_remove(array_agg(nullif(raw_hit->'data'->>'isp', '') order by last_seen_at desc), null))[1] as isp,
-        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '') order by last_seen_at desc), null))[1] as asn_name,
-        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '') order by last_seen_at desc), null))[1] as asn_number,
-        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '') order by last_seen_at desc), null))[1] as organization,
-        array_remove(array_agg(distinct port order by port), null) as ports,
-        max(last_seen_at) as last_seen_at
-      from netlas_hits
-      where ip is not null
-        and latitude is not null
-        and longitude is not null
-      group by host(ip)
-    `);
+    result = await queryInstanceRows(pool);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const isSchemaDrift = /column "last_seen_at" does not exist/i.test(message);
+    const shouldFallbackToLegacy =
+      /relation "netlas_instances" does not exist/i.test(message) ||
+      /column "ports" does not exist/i.test(message) ||
+      /column "isp" does not exist/i.test(message);
 
-    if (!isSchemaDrift) {
+    if (!shouldFallbackToLegacy) {
       throw error;
     }
 
     usedLegacyAggregation = true;
-    result = await pool.query<DatabasePointRow>(`
-      select
-        host(ip) as ip,
-        coalesce(max(nullif(country, '')), 'Unknown') as country,
-        max(nullif(city, '')) as city,
-        max(latitude) as latitude,
-        max(longitude) as longitude,
-        max(nullif(raw_hit->'data'->>'isp', '')) as isp,
-        max(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '')) as asn_name,
-        max(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '')) as asn_number,
-        max(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '')) as organization,
-        array_remove(array_agg(distinct port order by port), null) as ports,
-        null::timestamptz as last_seen_at
-      from netlas_hits
-      where ip is not null
-        and latitude is not null
-        and longitude is not null
-      group by host(ip)
-    `);
+    sourceFile = LEGACY_DATABASE_SOURCE_FILE;
+    result = await queryLegacyHitRows(pool);
   }
 
   const compatibilityNote = usedLegacyAggregation
-    ? "Database schema is outdated (missing `last_seen_at`). Run `pnpm netlas:validate` to migrate schema."
+    ? "Database is still on the legacy `netlas_hits` layout. Run `pnpm netlas:validate` to migrate to `netlas_instances`."
     : null;
 
   if (result.rowCount === 0) {
     return {
       generatedAt: lastSuccessfulSyncStartedAt,
-      sourceFile: DATABASE_SOURCE_FILE,
-      totalIps: 0,
+      sourceFile,
+      totalInstances: 0,
       countries: [],
       points: [],
       note: compatibilityNote
-        ? `No records found in database table \`netlas_hits\`. Run the Netlas sync job first. ${compatibilityNote}`
-        : "No records found in database table `netlas_hits`. Run the Netlas sync job first.",
+        ? `No records found in database table \`${sourceFile.replace("database:", "")}\`. Run the Netlas sync job first. ${compatibilityNote}`
+        : `No records found in database table \`${sourceFile.replace("database:", "")}\`. Run the Netlas sync job first.`,
     };
   }
 
   const pointMap = new Map<string, MutablePoint>();
   const countryCounts = new Map<string, number>();
-  let totalIps = 0;
+  let totalInstances = 0;
   let generatedAtEpochMs = 0;
 
   for (const row of result.rows) {
@@ -309,7 +322,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     const asnNumber = normalizeOptionalText(row.asn_number);
     const organization = normalizeOptionalText(row.organization);
 
-    totalIps += 1;
+    totalInstances += 1;
     countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
 
     const key = ip;
@@ -347,7 +360,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
         asnName,
         asnNumber,
         organization,
-        ipCount: 1,
+        instanceCount: 1,
         ports: new Set(ports),
       });
     }
@@ -363,8 +376,8 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
   return {
     generatedAt:
       lastSuccessfulSyncStartedAt ?? (generatedAtEpochMs > 0 ? new Date(generatedAtEpochMs).toISOString() : null),
-    sourceFile: DATABASE_SOURCE_FILE,
-    totalIps,
+    sourceFile,
+    totalInstances,
     countries,
     points,
     note:
@@ -386,7 +399,7 @@ export async function loadLatestExposureSnapshot(): Promise<ExposureSnapshot> {
     return {
       generatedAt: null,
       sourceFile: null,
-      totalIps: 0,
+      totalInstances: 0,
       countries: [],
       points: [],
       note: `Failed to load exposure snapshot from database. ${message}`,

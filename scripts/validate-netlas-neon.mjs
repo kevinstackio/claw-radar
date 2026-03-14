@@ -14,6 +14,7 @@ import {
   createRunDeduper,
   planRequestsForRun,
 } from "../lib/server/netlas-sync-core.mjs";
+import { mergeInstanceObservations } from "../lib/server/netlas-instance-sync.mjs";
 
 const DEFAULT_BASE_URL = "https://app.netlas.io";
 const DEFAULT_OPENCLAW_QUERY = "(http.title:\"OpenClaw Control\") OR (http.body:\"openclaw-app\") OR (http.body:\"__OPENCLAW_CONTROL_UI_BASE_PATH__\")";
@@ -260,50 +261,59 @@ async function callNetlas({ apiKey, baseUrl, query, start, timeoutMs }) {
   }
 }
 
-function normalizeHit(item, index, query, queryHash) {
+function normalizeOptionalText(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeNetlasObservation(item, query, queryHash) {
   const data = item && typeof item === "object" && item.data && typeof item.data === "object" ? item.data : item;
 
   const ip = normalizeIp(String(pick(data, ["ip"]) ?? pick(item, ["ip"]) ?? ""));
   const port = toPort(pick(data, ["port"]) ?? pick(item, ["port"]));
   const country = String(pick(data, ["geo", "country"]) ?? pick(data, ["country"]) ?? "Unknown").trim() || "Unknown";
-  const countryCode = pick(data, ["geo", "country_code"]) ?? null;
-  const city = pick(data, ["geo", "city"]) ?? null;
+  const countryCode = normalizeOptionalText(pick(data, ["geo", "country_code"]));
+  const city = normalizeOptionalText(pick(data, ["geo", "city"]));
   const latitude = toNumber(pick(data, ["geo", "location", "lat"]) ?? pick(data, ["latitude"]));
   const longitude = toNumber(pick(data, ["geo", "location", "lon"]) ?? pick(data, ["longitude"]));
-  const transport = pick(data, ["transport"]) ?? null;
-  const protocol = pick(data, ["protocol"]) ?? pick(data, ["service", "protocol"]) ?? "unknown";
-  const netlasItemId = pick(data, ["_id"]) ?? pick(item, ["id"]) ?? null;
+  const transport = normalizeOptionalText(pick(data, ["transport"]));
+  const protocol = normalizeOptionalText(pick(data, ["protocol"]) ?? pick(data, ["service", "protocol"]));
+  const netlasItemId = normalizeOptionalText(pick(data, ["_id"]) ?? pick(item, ["_id"]) ?? pick(item, ["id"]));
+  const isp = normalizeOptionalText(pick(data, ["isp"]));
+  const asnName = normalizeOptionalText(pick(data, ["whois", "asn", "name"]));
+  const asnNumber = normalizeOptionalText(pick(data, ["whois", "asn", "number"]));
+  const organization = normalizeOptionalText(pick(data, ["whois", "net", "organization"]));
 
   if (!ip || !isPublicIp(ip)) return { valid: false, reason: "invalid_or_non_public_ip" };
   if (latitude === null || longitude === null || !isValidCoordinate(latitude, longitude)) {
     return { valid: false, reason: "invalid_coordinates" };
   }
 
-  const protocolNorm = String(protocol).toLowerCase();
-  const assetKey = `${ip}|${port ?? 0}|${protocolNorm}`;
-  // Instance-level dedupe: same ip+port+protocol should always map to the same hit hash.
-  const hitHash = sha256(`netlas|${assetKey}`);
+  const protocolNorm = protocol ? protocol.toLowerCase() : null;
+  const transportNorm = transport ? transport.toLowerCase() : null;
+  const serviceKey = sha256(`netlas|${ip}|${port ?? 0}|${protocolNorm ?? ""}|${transportNorm ?? ""}|${netlasItemId ?? ""}`);
 
   return {
     valid: true,
-    hit: {
+    observation: {
       query,
       queryHash,
-      netlasItemIndex: index,
-      netlasItemId: typeof netlasItemId === "string" ? netlasItemId : null,
-      hitHash,
-      assetKey,
       ip,
-      port,
-      transport: typeof transport === "string" ? transport : null,
-      protocol: protocolNorm,
+      ports: port === null ? [] : [port],
+      transports: transportNorm ? [transportNorm] : [],
+      protocols: protocolNorm ? [protocolNorm] : [],
+      netlasItemIds: netlasItemId ? [netlasItemId] : [],
       country,
-      countryCode: typeof countryCode === "string" ? countryCode : null,
-      city: typeof city === "string" ? city : null,
+      countryCode,
+      city,
       latitude,
       longitude,
-      observedAt: null,
-      rawHit: item,
+      isp,
+      asnName,
+      asnNumber,
+      organization,
+      serviceKey,
     },
   };
 }
@@ -311,6 +321,141 @@ function normalizeHit(item, index, query, queryHash) {
 async function bootstrapSchema(client) {
   const schemaSql = await readFile(new URL("../docs/NEON-SCHEMA.sql", import.meta.url), "utf8");
   await client.query(schemaSql);
+}
+
+async function tableExists(client, tableName) {
+  const result = await client.query(
+    `
+      select to_regclass($1) as regclass
+    `,
+    [`public.${tableName}`]
+  );
+
+  return Boolean(result.rows[0]?.regclass);
+}
+
+async function migrateLegacyHitsTable(client) {
+  if (!(await tableExists(client, "netlas_hits"))) {
+    return false;
+  }
+
+  await client.query("begin");
+
+  try {
+    await client.query(`
+      insert into netlas_instances (
+        sync_job_id,
+        request_id,
+        key_id,
+        provider,
+        query,
+        query_hash,
+        ip,
+        ports,
+        transports,
+        protocols,
+        netlas_item_ids,
+        country,
+        country_code,
+        city,
+        latitude,
+        longitude,
+        isp,
+        asn_name,
+        asn_number,
+        organization,
+        first_seen_at,
+        last_seen_at,
+        created_at
+      )
+      select
+        (array_remove(array_agg(sync_job_id order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as sync_job_id,
+        (array_remove(array_agg(request_id order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as request_id,
+        (array_remove(array_agg(key_id order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as key_id,
+        coalesce((array_remove(array_agg(nullif(provider, '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1], 'netlas') as provider,
+        (array_remove(array_agg(nullif(query, '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as query,
+        (array_remove(array_agg(nullif(query_hash, '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as query_hash,
+        ip,
+        coalesce(array_remove(array_agg(distinct port order by port), null), '{}'::integer[]) as ports,
+        coalesce(array_remove(array_agg(distinct nullif(lower(transport), '') order by nullif(lower(transport), '')), null), '{}'::text[]) as transports,
+        coalesce(array_remove(array_agg(distinct nullif(lower(protocol), '') order by nullif(lower(protocol), '')), null), '{}'::text[]) as protocols,
+        coalesce(array_remove(array_agg(distinct nullif(netlas_item_id, '') order by nullif(netlas_item_id, '')), null), '{}'::text[]) as netlas_item_ids,
+        coalesce(
+          (array_remove(array_agg(case when nullif(country, '') is not null and country <> 'Unknown' then country end order by last_seen_at desc nulls last, created_at desc nulls last), null))[1],
+          (array_remove(array_agg(nullif(country, '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1],
+          'Unknown'
+        ) as country,
+        (array_remove(array_agg(nullif(country_code, '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as country_code,
+        (array_remove(array_agg(nullif(city, '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as city,
+        (array_remove(array_agg(latitude order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as latitude,
+        (array_remove(array_agg(longitude order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as longitude,
+        (array_remove(array_agg(nullif(raw_hit->'data'->>'isp', '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as isp,
+        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as asn_name,
+        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as asn_number,
+        (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '') order by last_seen_at desc nulls last, created_at desc nulls last), null))[1] as organization,
+        min(coalesce(first_seen_at, created_at, now())) as first_seen_at,
+        max(coalesce(last_seen_at, created_at, now())) as last_seen_at,
+        min(coalesce(created_at, now())) as created_at
+      from netlas_hits
+      where ip is not null
+      group by ip
+      on conflict (ip)
+      do update set
+        sync_job_id = excluded.sync_job_id,
+        request_id = excluded.request_id,
+        key_id = excluded.key_id,
+        provider = excluded.provider,
+        query = excluded.query,
+        query_hash = excluded.query_hash,
+        ports = (
+          select coalesce(array_agg(distinct port_value order by port_value), '{}'::integer[])
+          from unnest(coalesce(netlas_instances.ports, '{}'::integer[]) || coalesce(excluded.ports, '{}'::integer[])) as port_value
+        ),
+        transports = (
+          select coalesce(array_agg(distinct transport_value order by transport_value), '{}'::text[])
+          from unnest(coalesce(netlas_instances.transports, '{}'::text[]) || coalesce(excluded.transports, '{}'::text[])) as transport_value
+          where transport_value is not null and transport_value <> ''
+        ),
+        protocols = (
+          select coalesce(array_agg(distinct protocol_value order by protocol_value), '{}'::text[])
+          from unnest(coalesce(netlas_instances.protocols, '{}'::text[]) || coalesce(excluded.protocols, '{}'::text[])) as protocol_value
+          where protocol_value is not null and protocol_value <> ''
+        ),
+        netlas_item_ids = (
+          select coalesce(array_agg(distinct item_id order by item_id), '{}'::text[])
+          from unnest(coalesce(netlas_instances.netlas_item_ids, '{}'::text[]) || coalesce(excluded.netlas_item_ids, '{}'::text[])) as item_id
+          where item_id is not null and item_id <> ''
+        ),
+        country = case
+          when excluded.country is not null and excluded.country <> '' and excluded.country <> 'Unknown' then excluded.country
+          when netlas_instances.country is not null and netlas_instances.country <> '' then netlas_instances.country
+          else coalesce(nullif(excluded.country, ''), nullif(netlas_instances.country, ''), 'Unknown')
+        end,
+        country_code = coalesce(nullif(excluded.country_code, ''), netlas_instances.country_code),
+        city = coalesce(nullif(excluded.city, ''), netlas_instances.city),
+        latitude = case
+          when excluded.latitude is not null and excluded.longitude is not null then excluded.latitude
+          else netlas_instances.latitude
+        end,
+        longitude = case
+          when excluded.latitude is not null and excluded.longitude is not null then excluded.longitude
+          else netlas_instances.longitude
+        end,
+        isp = coalesce(nullif(excluded.isp, ''), netlas_instances.isp),
+        asn_name = coalesce(nullif(excluded.asn_name, ''), netlas_instances.asn_name),
+        asn_number = coalesce(nullif(excluded.asn_number, ''), netlas_instances.asn_number),
+        organization = coalesce(nullif(excluded.organization, ''), netlas_instances.organization),
+        first_seen_at = least(netlas_instances.first_seen_at, excluded.first_seen_at),
+        last_seen_at = greatest(netlas_instances.last_seen_at, excluded.last_seen_at)
+    `);
+
+    await client.query(`drop table if exists netlas_hits`);
+    await client.query("commit");
+    return true;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  }
 }
 
 async function resolveKeyIdentity(client, apiKey) {
@@ -386,126 +531,114 @@ async function bumpUsage(client, keyId, usageDelta) {
   );
 }
 
-async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
-  const insertResult = await client.query(
+async function upsertInstanceRecord(client, { syncJobId, requestId, keyId, observation }) {
+  const result = await client.query(
     `
-      insert into netlas_hits (
+      insert into netlas_instances (
         sync_job_id,
         request_id,
         key_id,
         provider,
         query,
         query_hash,
-        netlas_item_index,
-        netlas_item_id,
-        hit_hash,
-        asset_key,
         ip,
-        port,
-        transport,
-        protocol,
+        ports,
+        transports,
+        protocols,
+        netlas_item_ids,
         country,
         country_code,
         city,
         latitude,
         longitude,
-        observed_at,
         first_seen_at,
         last_seen_at,
-        raw_hit
+        isp,
+        asn_name,
+        asn_number,
+        organization
       )
       values (
-        $1, $2, $3, 'netlas', $4, $5, $6, $7, $8, $9,
-        $10::inet, $11, $12, $13, $14, $15, $16, $17, $18, $19, now(), now(), $20
+        $1, $2, $3, 'netlas', $4, $5, $6::inet, $7::integer[], $8::text[], $9::text[], $10::text[],
+        $11, $12, $13, $14, $15, now(), now(), $16, $17, $18, $19
       )
-      on conflict (hit_hash) where hit_hash is not null
-      do nothing
-      returning id
+      on conflict (ip)
+      do update set
+        sync_job_id = excluded.sync_job_id,
+        request_id = excluded.request_id,
+        key_id = excluded.key_id,
+        provider = excluded.provider,
+        query = excluded.query,
+        query_hash = excluded.query_hash,
+        ports = (
+          select coalesce(array_agg(distinct port_value order by port_value), '{}'::integer[])
+          from unnest(coalesce(netlas_instances.ports, '{}'::integer[]) || coalesce(excluded.ports, '{}'::integer[])) as port_value
+        ),
+        transports = (
+          select coalesce(array_agg(distinct transport_value order by transport_value), '{}'::text[])
+          from unnest(coalesce(netlas_instances.transports, '{}'::text[]) || coalesce(excluded.transports, '{}'::text[])) as transport_value
+          where transport_value is not null and transport_value <> ''
+        ),
+        protocols = (
+          select coalesce(array_agg(distinct protocol_value order by protocol_value), '{}'::text[])
+          from unnest(coalesce(netlas_instances.protocols, '{}'::text[]) || coalesce(excluded.protocols, '{}'::text[])) as protocol_value
+          where protocol_value is not null and protocol_value <> ''
+        ),
+        netlas_item_ids = (
+          select coalesce(array_agg(distinct item_id order by item_id), '{}'::text[])
+          from unnest(coalesce(netlas_instances.netlas_item_ids, '{}'::text[]) || coalesce(excluded.netlas_item_ids, '{}'::text[])) as item_id
+          where item_id is not null and item_id <> ''
+        ),
+        country = case
+          when excluded.country is not null and excluded.country <> '' and excluded.country <> 'Unknown' then excluded.country
+          when netlas_instances.country is not null and netlas_instances.country <> '' then netlas_instances.country
+          else coalesce(nullif(excluded.country, ''), nullif(netlas_instances.country, ''), 'Unknown')
+        end,
+        country_code = coalesce(nullif(excluded.country_code, ''), netlas_instances.country_code),
+        city = coalesce(nullif(excluded.city, ''), netlas_instances.city),
+        latitude = case
+          when excluded.latitude is not null and excluded.longitude is not null then excluded.latitude
+          else netlas_instances.latitude
+        end,
+        longitude = case
+          when excluded.latitude is not null and excluded.longitude is not null then excluded.longitude
+          else netlas_instances.longitude
+        end,
+        last_seen_at = greatest(netlas_instances.last_seen_at, excluded.last_seen_at),
+        isp = coalesce(nullif(excluded.isp, ''), netlas_instances.isp),
+        asn_name = coalesce(nullif(excluded.asn_name, ''), netlas_instances.asn_name),
+        asn_number = coalesce(nullif(excluded.asn_number, ''), netlas_instances.asn_number),
+        organization = coalesce(nullif(excluded.organization, ''), netlas_instances.organization)
+      returning (xmax = 0) as inserted
     `,
     [
       syncJobId,
       requestId,
       keyId,
-      hit.query,
-      hit.queryHash,
-      hit.netlasItemIndex,
-      hit.netlasItemId,
-      hit.hitHash,
-      hit.assetKey,
-      hit.ip,
-      hit.port,
-      hit.transport,
-      hit.protocol,
-      hit.country,
-      hit.countryCode,
-      hit.city,
-      hit.latitude,
-      hit.longitude,
-      hit.observedAt,
-      hit.rawHit,
+      observation.query,
+      observation.queryHash,
+      observation.ip,
+      observation.ports,
+      observation.transports,
+      observation.protocols,
+      observation.netlasItemIds,
+      observation.country,
+      observation.countryCode,
+      observation.city,
+      observation.latitude,
+      observation.longitude,
+      observation.isp,
+      observation.asnName,
+      observation.asnNumber,
+      observation.organization,
     ]
   );
 
-  if (insertResult.rowCount > 0) {
-    return "inserted";
+  if (result.rowCount === 0) {
+    throw new Error(`Failed to upsert netlas instance for IP ${observation.ip}.`);
   }
 
-  const updateResult = await client.query(
-    `
-      update netlas_hits
-      set
-        sync_job_id = $2,
-        request_id = $3,
-        key_id = $4,
-        query = $5,
-        query_hash = $6,
-        netlas_item_index = $7,
-        netlas_item_id = $8,
-        asset_key = $9,
-        ip = $10::inet,
-        port = $11,
-        transport = $12,
-        protocol = $13,
-        country = $14,
-        country_code = $15,
-        city = $16,
-        latitude = $17,
-        longitude = $18,
-        observed_at = $19,
-        last_seen_at = now(),
-        raw_hit = $20
-      where hit_hash = $1
-      returning id
-    `,
-    [
-      hit.hitHash,
-      syncJobId,
-      requestId,
-      keyId,
-      hit.query,
-      hit.queryHash,
-      hit.netlasItemIndex,
-      hit.netlasItemId,
-      hit.assetKey,
-      hit.ip,
-      hit.port,
-      hit.transport,
-      hit.protocol,
-      hit.country,
-      hit.countryCode,
-      hit.city,
-      hit.latitude,
-      hit.longitude,
-      hit.observedAt,
-      hit.rawHit,
-    ]
-  );
-
-  if (updateResult.rowCount > 0) {
-    return "updated";
-  }
-
-  throw new Error(`Failed to upsert netlas hit for hash ${hit.hitHash}.`);
+  return result.rows[0]?.inserted ? "inserted" : "updated";
 }
 
 async function loadTodayUsageByKey(client, keyIds) {
@@ -528,6 +661,26 @@ async function loadTodayUsageByKey(client, keyIds) {
     usage.set(String(row.key_id), Math.max(0, asInt(row.used_requests, 0)));
   }
   return usage;
+}
+
+export async function migrateNetlasInstanceSchema() {
+  const databaseUrl = String(process.env.DATABASE_URL ?? "").trim();
+  if (!databaseUrl) throw new Error("Missing required env: DATABASE_URL");
+
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: /sslmode=require/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+  });
+
+  await client.connect();
+
+  try {
+    await bootstrapSchema(client);
+    const migratedLegacyHits = await migrateLegacyHitsTable(client);
+    return { migratedLegacyHits };
+  } finally {
+    await client.end();
+  }
 }
 
 export async function runNetlasValidation(options = {}) {
@@ -562,6 +715,7 @@ export async function runNetlasValidation(options = {}) {
 
   try {
     await bootstrapSchema(client);
+    await migrateLegacyHitsTable(client);
     await seedRuntimeDictionary(client);
 
     const encryptionSecret = String(process.env.NETLAS_ENCRYPTION_KEY ?? "").trim();
@@ -775,22 +929,37 @@ export async function runNetlasValidation(options = {}) {
         [selectedKey.keyId]
       );
 
+      const pageInstances = new Map();
+
       for (let index = 0; index < result.items.length; index += 1) {
-        const normalized = normalizeHit(result.items[index], index, query, queryHash);
+        const normalized = normalizeNetlasObservation(result.items[index], query, queryHash);
         if (!normalized.valid) {
           selectedKey.invalid += 1;
           totalInvalid += 1;
           continue;
         }
 
-        const hit = normalized.hit;
-        if (!runDeduper.addIfNew(hit.hitHash)) {
+        const observation = normalized.observation;
+        if (!runDeduper.addIfNew(observation.serviceKey)) {
           selectedKey.duplicateInRun += 1;
           totalDuplicateInRun += 1;
           continue;
         }
 
-        const action = await upsertHitRecord(client, { syncJobId, requestId, keyId: selectedKey.keyId, hit });
+        const existingObservation = pageInstances.get(observation.ip);
+        pageInstances.set(
+          observation.ip,
+          existingObservation ? mergeInstanceObservations(existingObservation, observation) : observation
+        );
+      }
+
+      for (const observation of pageInstances.values()) {
+        const action = await upsertInstanceRecord(client, {
+          syncJobId,
+          requestId,
+          keyId: selectedKey.keyId,
+          observation,
+        });
         if (action === "inserted") {
           selectedKey.inserted += 1;
           totalInserted += 1;

@@ -4,7 +4,7 @@ This project can run in a **production-only** setup (no test/staging environment
 
 ## 1) Runtime Behavior
 
-- Dashboard/API currently read from **database only** (`netlas_hits` aggregation).
+- Dashboard/API currently read from **database only** (`netlas_instances` aggregation).
 - `scripts/fetch-netlas-openclaw.mjs` still writes local backups for manual inspection, but UI path does not consume local files.
 
 ## 2) Required Production Environment Variables
