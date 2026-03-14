@@ -3,17 +3,25 @@
 ## Goal
 
 - Record the current exposure map behavior.
-- Make it explicit that the map now renders one emoji marker per raw country/region code.
+- Make it explicit that world view and country/detail view use different point-display rules.
 
 ## Current Behavior
 
 - The map renders the Leaflet/OpenStreetMap base layer.
-- Each raw country/region code renders exactly one static `🦞` marker.
+- The map uses four zoom tiers with `maxZoom = 12` and `minZoom = 1`.
+- `1-3`: world view
+- `4-6`: country view
+- `7-9`: regional view
+- `10-12`: detail view
+- In world view (`zoom <= 3`), each raw country/region code renders one active `🦞`.
 - Codes are grouped exactly as stored in the snapshot; region codes like `HK` and `CN` stay separate.
-- Codes with a single instance stay fixed on that one point.
-- Codes with multiple instances periodically switch to another instance from that same code.
-- Each point uses a fixed `5s` timing window: `1s` fade in, `3s` steady, `1s` fade out.
-- The switch is sequential: one `🦞` fully fades out before the next `🦞` fades in.
+- World-view codes with a single instance stay fixed on that one point.
+- World-view codes with multiple instances periodically switch to another instance from that same code.
+- World-view timing is fixed at `5s` per point: `1s` fade in, `3s` steady, `1s` fade out.
+- World-view switching is sequential: one `🦞` fully fades out before the next `🦞` fades in.
+- Once the user zooms beyond world view, the map renders all valid `🦞` instance points directly.
+- Country, regional, and detail view do not do province aggregation.
+- `🦞` marker size is `12` in world view and `16` in country/regional/detail view.
 - The map does not render popups, ripple effects, or world-view rotation logic.
 - Zooming and panning remain available as plain map navigation.
 - IP search no longer drives map focus or popup state.
@@ -21,7 +29,7 @@
 ## Implementation
 
 - `/Users/kevin/Documents/git/claw-radar/components/exposure-map-client.tsx`
-  - renders the base map and one rotating marker per raw country/region code
+  - switches between world-view region rotation and full instance-point rendering
 - `/Users/kevin/Documents/git/claw-radar/components/exposure-map.tsx`
   - client-only wrapper for the map panel
 - `/Users/kevin/Documents/git/claw-radar/lib/map-region-rotation.mjs`

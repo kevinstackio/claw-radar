@@ -36,26 +36,42 @@ const barChartConfig = {
   },
 } satisfies ChartConfig;
 
+const PIE_SLICE_COLORS = [
+  "color-mix(in oklch, var(--chart-1) 96%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 88%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 80%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 72%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 64%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 56%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 48%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 40%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 32%, var(--background))",
+  "color-mix(in oklch, var(--chart-1) 24%, var(--background))",
+] as const;
+
+const PIE_OTHERS_COLOR = "color-mix(in oklch, var(--chart-1) 16%, var(--background))";
+
 const pieChartConfig = {
   value: {
     label: "Instances",
     color: "var(--chart-1)",
   },
-  c1: { label: "Slice 1", color: "var(--chart-1)" },
-  c2: { label: "Slice 2", color: "var(--chart-2)" },
-  c3: { label: "Slice 3", color: "var(--chart-3)" },
-  c4: { label: "Slice 4", color: "var(--chart-4)" },
-  c5: { label: "Slice 5", color: "var(--chart-5)" },
-  c6: { label: "Others", color: "var(--muted)" },
+  c1: { label: "Slice 1", color: PIE_SLICE_COLORS[0] },
+  c2: { label: "Slice 2", color: PIE_SLICE_COLORS[1] },
+  c3: { label: "Slice 3", color: PIE_SLICE_COLORS[2] },
+  c4: { label: "Slice 4", color: PIE_SLICE_COLORS[3] },
+  c5: { label: "Slice 5", color: PIE_SLICE_COLORS[4] },
+  c6: { label: "Slice 6", color: PIE_SLICE_COLORS[5] },
+  c7: { label: "Slice 7", color: PIE_SLICE_COLORS[6] },
+  c8: { label: "Slice 8", color: PIE_SLICE_COLORS[7] },
+  c9: { label: "Slice 9", color: PIE_SLICE_COLORS[8] },
+  c10: { label: "Slice 10", color: PIE_SLICE_COLORS[9] },
+  c11: { label: "Others", color: PIE_OTHERS_COLOR },
 } satisfies ChartConfig;
 
 const PIE_COLORS = [
-  "var(--color-c1)",
-  "var(--color-c2)",
-  "var(--color-c3)",
-  "var(--color-c4)",
-  "var(--color-c5)",
-  "var(--color-c6)",
+  ...PIE_SLICE_COLORS,
+  PIE_OTHERS_COLOR,
 ];
 
 function PieCountryTooltip({
@@ -115,22 +131,22 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   const hasData = countries.length > 0;
 
   const pieData = useMemo<PieChartDatum[]>(() => {
-    const topFive = countries.slice(0, 5).map((item, index) => ({
+    const topTen = countries.slice(0, 10).map((item, index) => ({
       name: item.name,
       value: item.value,
       color: PIE_COLORS[index % PIE_COLORS.length],
     }));
-    const othersValue = countries.slice(5).reduce((acc, item) => acc + item.value, 0);
+    const othersValue = countries.slice(10).reduce((acc, item) => acc + item.value, 0);
 
     if (othersValue > 0) {
-      topFive.push({
+      topTen.push({
         name: "Others",
         value: othersValue,
-        color: PIE_COLORS[topFive.length % PIE_COLORS.length],
+        color: PIE_COLORS[PIE_COLORS.length - 1],
       });
     }
 
-    return topFive;
+    return topTen;
   }, [countries]);
 
   const barData = useMemo(
@@ -139,7 +155,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   );
 
   const title = mode === "pie" ? "Exposure Share" : "Exposure Count";
-  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Ranking of all countries by instances";
+  const subtitle = mode === "pie" ? "Top 10 countries + Others" : "Ranking of all countries by instances";
 
   return (
     <div className="relative size-full">

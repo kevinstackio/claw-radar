@@ -142,7 +142,6 @@ body {
 
 .leaflet-marker-icon.exposure-map-lobster-icon .exposure-map-lobster-glyph {
   display: block;
-  font-size: 9px;
   line-height: 1;
   user-select: none;
 }
