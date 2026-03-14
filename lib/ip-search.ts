@@ -6,7 +6,6 @@ export type IpSearchPoint = {
   ip: string;
   country: string;
   portSummary: string;
-  count: number;
   latitude: number;
   longitude: number;
   updatedAt: string | null;

@@ -51,7 +51,6 @@ export async function POST(request: Request) {
         ip: matchedPoint.ip,
         country: matchedPoint.country,
         portSummary: matchedPoint.portSummary,
-        count: matchedPoint.count,
         latitude,
         longitude,
         updatedAt: snapshot.generatedAt,

@@ -20,7 +20,6 @@ type ExposureMapClientProps = {
 type PlottedPoint = ExposureSnapshot["points"][number] & {
   lat: number;
   lon: number;
-  count: number;
 };
 
 type ClusterKind = "global" | "country" | "city";
@@ -32,8 +31,7 @@ type CountEntry = {
 
 type CityAnchorCandidate = {
   label: string;
-  instanceCount: number;
-  seenCount: number;
+  ipCount: number;
 };
 
 type AggregateBucket = {
@@ -49,12 +47,8 @@ type AggregateBucket = {
   anchorCityKey: string | null;
   anchorLat: number | null;
   anchorLon: number | null;
-  anchorInstanceCount: number;
-  anchorSeenCount: number;
   anchorIp: string | null;
-  instanceCount: number;
-  seenCount: number;
-  pointCount: number;
+  ipCount: number;
   countries: Map<string, number>;
   cities: Map<string, number>;
   ports: Map<string, number>;
@@ -69,9 +63,7 @@ type ClusterNode = {
   city: string | null;
   lat: number;
   lon: number;
-  instanceCount: number;
-  seenCount: number;
-  pointCount: number;
+  ipCount: number;
   countryCount: number;
   cityCount: number;
   topCountries: CountEntry[];
@@ -80,13 +72,13 @@ type ClusterNode = {
   topOrganizations: CountEntry[];
 };
 
-type InstanceNode = {
+type IpNode = {
   key: string;
-  kind: "instance";
+  kind: "ip";
   point: PlottedPoint;
 };
 
-type MapNode = ClusterNode | InstanceNode;
+type MapNode = ClusterNode | IpNode;
 
 type ClusterVisualSpec = {
   markerRadius: number;
@@ -103,10 +95,10 @@ const MAP_LAYER_ZOOM_RANGES = {
   global: { min: 0, max: 3 },
   country: { min: 4, max: 6 },
   city: { min: 7, max: 9 },
-  instance: { min: 10, max: 12 },
+  ip: { min: 10, max: 12 },
 } as const;
 
-const MAP_MAX_ZOOM = MAP_LAYER_ZOOM_RANGES.instance.max;
+const MAP_MAX_ZOOM = MAP_LAYER_ZOOM_RANGES.ip.max;
 const MAP_TILE_DETAIL_MAX_ZOOM = 10;
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
@@ -146,10 +138,6 @@ const CLUSTER_VISUAL_SPECS: Record<ClusterKind, ClusterVisualSpec> = {
     rippleSecondaryOpacity: 0.4,
   },
 };
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
 
 function isValidCoordinate(lat: number, lon: number) {
   return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
@@ -218,12 +206,8 @@ function createBucket(
     anchorCityKey: null,
     anchorLat: null,
     anchorLon: null,
-    anchorInstanceCount: -1,
-    anchorSeenCount: -1,
     anchorIp: null,
-    instanceCount: 0,
-    seenCount: 0,
-    pointCount: 0,
+    ipCount: 0,
     countries: new Map(),
     cities: new Map(),
     ports: new Map(),
@@ -232,27 +216,23 @@ function createBucket(
 }
 
 function accumulateBucket(bucket: AggregateBucket, point: PlottedPoint) {
-  const weight = Math.max(point.count, 1);
+  const weight = Math.max(point.ipCount, 1);
   bucket.latWeighted += point.lat * weight;
   bucket.lonWeighted += point.lon * weight;
   bucket.weightTotal += weight;
-  bucket.instanceCount += point.instanceCount;
-  bucket.seenCount += point.count;
-  bucket.pointCount += 1;
+  bucket.ipCount += point.ipCount;
 
-  addCount(bucket.countries, point.country, point.count);
-  addCount(bucket.cities, normalizeCityName(point.city), point.count);
-  collectPorts(point.portSummary, point.count, bucket.ports);
+  addCount(bucket.countries, point.country, point.ipCount);
+  addCount(bucket.cities, normalizeCityName(point.city), point.ipCount);
+  collectPorts(point.portSummary, point.ipCount, bucket.ports);
 
   if (bucket.kind === "global") {
     const cityKey = getCityAnchorKey(point.city);
     const cityCandidate = bucket.cityAnchorCandidates.get(cityKey) ?? {
       label: getCityAnchorLabel(point.city),
-      instanceCount: 0,
-      seenCount: 0,
+      ipCount: 0,
     };
-    cityCandidate.instanceCount += point.instanceCount;
-    cityCandidate.seenCount += point.count;
+    cityCandidate.ipCount += point.ipCount;
     bucket.cityAnchorCandidates.set(cityKey, cityCandidate);
   }
 
@@ -266,18 +246,14 @@ function accumulateBucket(bucket: AggregateBucket, point: PlottedPoint) {
         : point.asnNumber
           ? `AS${point.asnNumber}`
           : null);
-  addCount(bucket.organizations, organizationLabel, point.count);
+  addCount(bucket.organizations, organizationLabel, point.ipCount);
 }
 
 function selectGlobalAnchorCities(buckets: Map<string, AggregateBucket>) {
   for (const bucket of buckets.values()) {
     const selected = [...bucket.cityAnchorCandidates.entries()].sort((a, b) => {
-      if (b[1].instanceCount !== a[1].instanceCount) {
-        return b[1].instanceCount - a[1].instanceCount;
-      }
-
-      if (b[1].seenCount !== a[1].seenCount) {
-        return b[1].seenCount - a[1].seenCount;
+      if (b[1].ipCount !== a[1].ipCount) {
+        return b[1].ipCount - a[1].ipCount;
       }
 
       return a[1].label.localeCompare(b[1].label);
@@ -300,17 +276,9 @@ function attachGlobalAnchors(buckets: Map<string, AggregateBucket>, points: Plot
       continue;
     }
 
-    if (
-      point.instanceCount > bucket.anchorInstanceCount ||
-      (point.instanceCount === bucket.anchorInstanceCount && point.count > bucket.anchorSeenCount) ||
-      (point.instanceCount === bucket.anchorInstanceCount &&
-        point.count === bucket.anchorSeenCount &&
-        (bucket.anchorIp === null || point.ip.localeCompare(bucket.anchorIp) < 0))
-    ) {
+    if (bucket.anchorIp === null || point.ip.localeCompare(bucket.anchorIp) < 0) {
       bucket.anchorLat = point.lat;
       bucket.anchorLon = point.lon;
-      bucket.anchorInstanceCount = point.instanceCount;
-      bucket.anchorSeenCount = point.count;
       bucket.anchorIp = point.ip;
     }
   }
@@ -336,9 +304,7 @@ function finalizeBuckets(buckets: Map<string, AggregateBucket>): ClusterNode[] {
           : bucket.weightTotal > 0
             ? bucket.lonWeighted / bucket.weightTotal
             : 0,
-      instanceCount: bucket.instanceCount,
-      seenCount: bucket.seenCount,
-      pointCount: bucket.pointCount,
+      ipCount: bucket.ipCount,
       countryCount: bucket.countries.size,
       cityCount: bucket.cities.size,
       topCountries: toTopEntries(bucket.countries),
@@ -346,7 +312,7 @@ function finalizeBuckets(buckets: Map<string, AggregateBucket>): ClusterNode[] {
       topPorts: toTopEntries(bucket.ports),
       topOrganizations: toTopEntries(bucket.organizations),
     }))
-    .sort((a, b) => b.instanceCount - a.instanceCount);
+    .sort((a, b) => b.ipCount - a.ipCount);
 }
 
 function cityGridStepForZoom(zoom: number) {
@@ -421,10 +387,10 @@ function buildCityNodes(points: PlottedPoint[], zoom: number): ClusterNode[] {
   return finalizeBuckets(buckets);
 }
 
-function buildInstanceNodes(points: PlottedPoint[]): InstanceNode[] {
+function buildIpNodes(points: PlottedPoint[]): IpNode[] {
   return points.map((point) => ({
     key: `${point.ip}-${point.lat}-${point.lon}`,
-    kind: "instance",
+    kind: "ip",
     point,
   }));
 }
@@ -505,26 +471,20 @@ function ClusterPopupContent({
           { label: "Country", value: node.country ?? "Unknown" },
           { label: "Anchor City", value: node.city ?? "Unknown" },
           { label: "Cities", value: node.cityCount.toString() },
-          { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
-          { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
-          { label: "Points", value: node.pointCount.toLocaleString("en-US") },
+          { label: "IPs", value: node.ipCount.toLocaleString("en-US") },
           { label: "Updated", value: updatedAtLabel },
         ]
       : node.kind === "country"
         ? [
             { label: "Country", value: node.country ?? "Unknown" },
             { label: "Cities", value: node.cityCount.toString() },
-            { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
-            { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
-            { label: "Points", value: node.pointCount.toLocaleString("en-US") },
+            { label: "IPs", value: node.ipCount.toLocaleString("en-US") },
             { label: "Updated", value: updatedAtLabel },
           ]
         : [
             { label: "City", value: node.city ?? node.label },
             { label: "Country", value: node.country ?? "Unknown" },
-            { label: "Instances", value: node.instanceCount.toLocaleString("en-US") },
-            { label: "Seen", value: node.seenCount.toLocaleString("en-US") },
-            { label: "Points", value: node.pointCount.toLocaleString("en-US") },
+            { label: "IPs", value: node.ipCount.toLocaleString("en-US") },
             { label: "Updated", value: updatedAtLabel },
           ];
 
@@ -556,7 +516,7 @@ function ClusterPopupContent({
   );
 }
 
-function InstancePopupContent({
+function IpPopupContent({
   point,
   updatedAtLabel,
 }: {
@@ -581,8 +541,6 @@ function InstancePopupContent({
         ]
       : []),
     ...(point.organization ? [{ label: "Organization", value: point.organization }] : []),
-    { label: "Instances", value: point.instanceCount.toLocaleString("en-US") },
-    { label: "Seen", value: point.count.toLocaleString("en-US") },
     { label: "Ports", value: point.portSummary || "N/A" },
     { label: "Updated", value: updatedAtLabel },
   ];
@@ -591,7 +549,7 @@ function InstancePopupContent({
     <div className={informationLayout.popupContainer}>
       <div className="space-y-1 px-1">
         <p className={informationLayout.sectionTitle}>{point.ip}</p>
-        <p className={informationLayout.sectionSubtitle}>Single instance view</p>
+        <p className={informationLayout.sectionSubtitle}>Single IP view</p>
       </div>
       {popupRows.map((row) => (
         <MetricRow key={`${point.ip}-${row.label}`} label={row.label} value={row.value} />
@@ -656,7 +614,7 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
     () =>
       snapshot.points
         .map((point) => {
-          const [lon, lat, count] = point.value;
+          const [lon, lat] = point.value;
           if (!isValidCoordinate(lat, lon)) {
             return null;
           }
@@ -664,7 +622,6 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
             ...point,
             lat,
             lon,
-            count: Number.isFinite(count) ? count : 1,
           };
         })
         .filter((point): point is PlottedPoint => point !== null),
@@ -685,8 +642,8 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
   const updatedAtLabel = formatSnapshotTime(snapshot.generatedAt);
 
   const mapNodes = useMemo<MapNode[]>(() => {
-    if (mapZoom >= MAP_LAYER_ZOOM_RANGES.instance.min) {
-      return buildInstanceNodes(plottedPoints);
+    if (mapZoom >= MAP_LAYER_ZOOM_RANGES.ip.min) {
+      return buildIpNodes(plottedPoints);
     }
 
     if (mapZoom >= MAP_LAYER_ZOOM_RANGES.city.min) {
@@ -754,14 +711,10 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
         <MapSelectionController target={matchedPoint} />
 
         {mapNodes.map((node) => {
-          if (node.kind === "instance") {
+          if (node.kind === "ip") {
             const point = node.point;
             const isSelected = matchedPoint?.ip === point.ip;
-            const radius = clamp(
-              1.32 + Math.log2(Math.max(1, point.count)) * 0.3 + (isSelected ? 0.45 : 0),
-              0.9,
-              isSelected ? 4 : 3.1
-            );
+            const radius = isSelected ? 3.8 : 2.8;
 
             return (
               <CircleMarker
@@ -783,7 +736,7 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
                 }}
               >
                 <Popup className="exposure-popup" closeButton={false}>
-                  <InstancePopupContent point={point} updatedAtLabel={updatedAtLabel} />
+                  <IpPopupContent point={point} updatedAtLabel={updatedAtLabel} />
                 </Popup>
               </CircleMarker>
             );

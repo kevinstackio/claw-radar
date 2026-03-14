@@ -13,8 +13,7 @@ type MutablePoint = {
   asnName: string | null;
   asnNumber: string | null;
   organization: string | null;
-  instanceCount: number;
-  count: number;
+  ipCount: number;
   ports: Set<number>;
 };
 
@@ -28,8 +27,6 @@ type DatabasePointRow = {
   asn_name: string | null;
   asn_number: string | null;
   organization: string | null;
-  instance_count: number | string | null;
-  hit_count: number | string | null;
   ports: unknown;
   last_seen_at: string | Date | null;
 };
@@ -176,9 +173,8 @@ function toPoints(pointMap: Map<string, MutablePoint>): ExposurePoint[] {
     asnName: point.asnName,
     asnNumber: point.asnNumber,
     organization: point.organization,
-    instanceCount: point.instanceCount,
-    count: point.count,
-    value: [point.longitude, point.latitude, point.count],
+    ipCount: point.ipCount,
+    value: [point.longitude, point.latitude, point.ipCount],
   }));
 }
 
@@ -224,29 +220,25 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     result = await pool.query<DatabasePointRow>(`
       select
         host(ip) as ip,
-        coalesce(nullif(country, ''), 'Unknown') as country,
         (array_remove(array_agg(nullif(city, '') order by last_seen_at desc), null))[1] as city,
-        latitude,
-        longitude,
+        coalesce((array_remove(array_agg(nullif(country, '') order by last_seen_at desc), null))[1], 'Unknown') as country,
+        (array_remove(array_agg(latitude order by last_seen_at desc), null))[1] as latitude,
+        (array_remove(array_agg(longitude order by last_seen_at desc), null))[1] as longitude,
         (array_remove(array_agg(nullif(raw_hit->'data'->>'isp', '') order by last_seen_at desc), null))[1] as isp,
         (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '') order by last_seen_at desc), null))[1] as asn_name,
         (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '') order by last_seen_at desc), null))[1] as asn_number,
         (array_remove(array_agg(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '') order by last_seen_at desc), null))[1] as organization,
-        count(distinct coalesce(asset_key, concat_ws('|', host(ip), coalesce(port, 0)::text, coalesce(protocol, 'unknown'))))::int as instance_count,
-        sum(greatest(seen_count, 1))::int as hit_count,
         array_remove(array_agg(distinct port order by port), null) as ports,
         max(last_seen_at) as last_seen_at
       from netlas_hits
       where ip is not null
         and latitude is not null
         and longitude is not null
-      group by host(ip), coalesce(nullif(country, ''), 'Unknown'), latitude, longitude
+      group by host(ip)
     `);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const isSchemaDrift =
-      /column "seen_count" does not exist/i.test(message) ||
-      /column "last_seen_at" does not exist/i.test(message);
+    const isSchemaDrift = /column "last_seen_at" does not exist/i.test(message);
 
     if (!isSchemaDrift) {
       throw error;
@@ -256,38 +248,33 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     result = await pool.query<DatabasePointRow>(`
       select
         host(ip) as ip,
-        coalesce(nullif(country, ''), 'Unknown') as country,
+        coalesce(max(nullif(country, '')), 'Unknown') as country,
         max(nullif(city, '')) as city,
-        latitude,
-        longitude,
+        max(latitude) as latitude,
+        max(longitude) as longitude,
         max(nullif(raw_hit->'data'->>'isp', '')) as isp,
         max(nullif(raw_hit->'data'->'whois'->'asn'->>'name', '')) as asn_name,
         max(nullif(raw_hit->'data'->'whois'->'asn'->>'number', '')) as asn_number,
         max(nullif(raw_hit->'data'->'whois'->'net'->>'organization', '')) as organization,
-        count(distinct coalesce(asset_key, concat_ws('|', host(ip), coalesce(port, 0)::text, coalesce(protocol, 'unknown'))))::int as instance_count,
-        count(*)::int as hit_count,
         array_remove(array_agg(distinct port order by port), null) as ports,
         null::timestamptz as last_seen_at
       from netlas_hits
       where ip is not null
         and latitude is not null
         and longitude is not null
-      group by host(ip), coalesce(nullif(country, ''), 'Unknown'), latitude, longitude
+      group by host(ip)
     `);
   }
 
   const compatibilityNote = usedLegacyAggregation
-    ? "Database schema is outdated (missing `seen_count` or `last_seen_at`). Run `pnpm netlas:validate` to migrate schema."
+    ? "Database schema is outdated (missing `last_seen_at`). Run `pnpm netlas:validate` to migrate schema."
     : null;
 
   if (result.rowCount === 0) {
     return {
       generatedAt: lastSuccessfulSyncStartedAt,
       sourceFile: DATABASE_SOURCE_FILE,
-      totalInstances: 0,
-      totalRecords: 0,
-      publicRecords: 0,
-      plottedPoints: 0,
+      totalIps: 0,
       countries: [],
       points: [],
       note: compatibilityNote
@@ -298,8 +285,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
 
   const pointMap = new Map<string, MutablePoint>();
   const countryCounts = new Map<string, number>();
-  let totalInstances = 0;
-  let publicRecords = 0;
+  let totalIps = 0;
   let generatedAtEpochMs = 0;
 
   for (const row of result.rows) {
@@ -314,10 +300,6 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
       continue;
     }
 
-    const instanceCountRaw = Number.parseInt(String(row.instance_count ?? "1"), 10);
-    const instanceCount = Number.isInteger(instanceCountRaw) && instanceCountRaw > 0 ? instanceCountRaw : 1;
-    const countRaw = Number.parseInt(String(row.hit_count ?? "1"), 10);
-    const count = Number.isInteger(countRaw) && countRaw > 0 ? countRaw : 1;
     const country = String(row.country ?? "Unknown").trim() || "Unknown";
     const city = normalizeOptionalText(row.city);
     const ports = normalizePortList(row.ports);
@@ -327,15 +309,12 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     const asnNumber = normalizeOptionalText(row.asn_number);
     const organization = normalizeOptionalText(row.organization);
 
-    totalInstances += instanceCount;
-    publicRecords += count;
-    countryCounts.set(country, (countryCounts.get(country) ?? 0) + count);
+    totalIps += 1;
+    countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
 
     const key = ip;
     const existing = pointMap.get(key);
     if (existing) {
-      existing.instanceCount += instanceCount;
-      existing.count += count;
       for (const port of ports) {
         existing.ports.add(port);
       }
@@ -368,8 +347,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
         asnName,
         asnNumber,
         organization,
-        instanceCount,
-        count,
+        ipCount: 1,
         ports: new Set(ports),
       });
     }
@@ -386,10 +364,7 @@ async function loadLatestExposureSnapshotFromDatabase(): Promise<ExposureSnapsho
     generatedAt:
       lastSuccessfulSyncStartedAt ?? (generatedAtEpochMs > 0 ? new Date(generatedAtEpochMs).toISOString() : null),
     sourceFile: DATABASE_SOURCE_FILE,
-    totalInstances,
-    totalRecords: publicRecords,
-    publicRecords,
-    plottedPoints: points.length,
+    totalIps,
     countries,
     points,
     note:
@@ -411,10 +386,7 @@ export async function loadLatestExposureSnapshot(): Promise<ExposureSnapshot> {
     return {
       generatedAt: null,
       sourceFile: null,
-      totalInstances: 0,
-      totalRecords: 0,
-      publicRecords: 0,
-      plottedPoints: 0,
+      totalIps: 0,
       countries: [],
       points: [],
       note: `Failed to load exposure snapshot from database. ${message}`,

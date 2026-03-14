@@ -20,10 +20,11 @@ Neon 负责存储“可追溯运行状态”，包括：
 - 密钥状态、限额、健康度
 - 请求生命周期（`pending -> ok/timeout/unknown/...`）
 - 每次同步任务的计划、执行与结果
-- 命中记录（结构化字段 + 原始 `raw_hit`）
+- 资产明细记录（结构化字段 + 原始 `raw_hit`）
 - 额度校准快照与漂移记录
 
 本地快照文件（`data/backups/exposure/...`）可保留用于离线核对；当前仪表盘在线路径走数据库聚合。
+当前前端统计口径为“唯一公网 IP 数”，不展示重复扫描次数。
 
 ## 3. 必要环境变量
 
@@ -41,7 +42,7 @@ NETLAS_ENCRYPTION_KEY=<strong-random-secret>
 - `netlas_keys`：密钥池（仅存密文，不存明文）
 - `netlas_sync_jobs`：同步任务主记录
 - `netlas_requests`：上游请求级明细（含响应体）
-- `netlas_hits`：逐条命中记录（含 `raw_hit`）
+- `netlas_hits`：逐条资产记录（含 `raw_hit`）
 - `netlas_snapshots`：本地快照元数据
 - `netlas_key_usage_daily`：日用量
 - `netlas_key_usage_monthly`：月用量
@@ -63,7 +64,7 @@ NETLAS_ENCRYPTION_KEY=<strong-random-secret>
 - `request_id`、`key_id`、`endpoint`、`start_offset`、`status`、`http_status`、`duration_ms`
 - `response_headers`、`response_body(jsonb)`、`response_body_text`
 
-命中级：
+资产级：
 
 - `request_id`、`netlas_item_index`、`ip`、`port`、地理字段
 - `raw_hit(jsonb)`（用于完整还原）

@@ -30,15 +30,15 @@ type PieTooltipPayloadItem = {
 };
 
 const barChartConfig = {
-  records: {
-    label: "Hits",
+  ips: {
+    label: "Instances",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
 const pieChartConfig = {
   value: {
-    label: "Hits",
+    label: "Instances",
     color: "var(--chart-1)",
   },
   c1: { label: "Slice 1", color: "var(--chart-1)" },
@@ -95,7 +95,7 @@ function PieCountryTooltip({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: markerColor }} />
-          <span className={informationText.l4Meta}>Hits</span>
+          <span className={informationText.l4Meta}>Instances</span>
         </div>
         <span className={informationText.rowValue}>{count}</span>
       </div>
@@ -134,12 +134,12 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
   }, [countries]);
 
   const barData = useMemo(
-    () => countries.map((item) => ({ country: item.name, records: item.value })),
+    () => countries.map((item) => ({ country: item.name, ips: item.value })),
     [countries]
   );
 
   const title = mode === "pie" ? "Exposure Share" : "Exposure Count";
-  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Ranking of all countries by hits";
+  const subtitle = mode === "pie" ? "Top 5 countries + Others" : "Ranking of all countries by instances";
 
   return (
     <div className="relative size-full">
@@ -227,7 +227,7 @@ export function CountryExposureBarChart({ snapshot }: CountryExposureBarChartPro
               tick={{ fontSize: informationChart.axisFontSize, fill: "var(--color-muted-foreground)" }}
             />
             <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-            <Bar dataKey="records" fill="var(--color-records)" radius={informationChart.barRadius} />
+            <Bar dataKey="ips" fill="var(--color-ips)" radius={informationChart.barRadius} />
           </BarChart>
         </ChartContainer>
       )}

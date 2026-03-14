@@ -412,12 +412,11 @@ async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
         observed_at,
         first_seen_at,
         last_seen_at,
-        seen_count,
         raw_hit
       )
       values (
         $1, $2, $3, 'netlas', $4, $5, $6, $7, $8, $9,
-        $10::inet, $11, $12, $13, $14, $15, $16, $17, $18, $19, now(), now(), 1, $20
+        $10::inet, $11, $12, $13, $14, $15, $16, $17, $18, $19, now(), now(), $20
       )
       on conflict (hit_hash) where hit_hash is not null
       do nothing
@@ -474,7 +473,6 @@ async function upsertHitRecord(client, { syncJobId, requestId, keyId, hit }) {
         longitude = $18,
         observed_at = $19,
         last_seen_at = now(),
-        seen_count = netlas_hits.seen_count + 1,
         raw_hit = $20
       where hit_hash = $1
       returning id
@@ -861,14 +859,12 @@ export async function runNetlasValidation(options = {}) {
         set
           processed_targets = $2,
           pages_fetched = $3,
-          total_hits = $4,
-          deduped_hits = $5,
-          final_status = $6,
-          summary = $7,
+          final_status = $4,
+          summary = $5,
           finished_at = now()
         where id = $1
       `,
-      [syncJobId, keys.length, totalPagesFetched, totalInserted + totalUpdated, totalInserted, finalStatus, summary]
+      [syncJobId, keys.length, totalPagesFetched, finalStatus, summary]
     );
 
     console.log("Validation finished.");

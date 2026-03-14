@@ -35,7 +35,7 @@ const THEME_INIT_SCRIPT = `
 export const metadata: Metadata = {
   title: "ClawRadar",
   description:
-    "ClawRadar visualizes publicly exposed OpenClaw instances worldwide, highlighting potential security risks.",
+    "ClawRadar visualizes publicly exposed OpenClaw IPs worldwide, highlighting potential security risks.",
   icons: {
     icon: "/claw-radar-icon.svg",
     shortcut: "/claw-radar-icon.svg",
@@ -118,4 +118,3 @@ export default function RootLayout({
     </html>
   );
 }
-

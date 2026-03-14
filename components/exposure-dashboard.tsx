@@ -28,17 +28,12 @@ export function ExposureDashboard({ snapshot }: ExposureDashboardProps) {
   const summaryItems = [
     {
       title: "INSTANCES",
-      tip: "Unique publicly exposed instances.",
-      value: numberFormatter.format(snapshot.totalInstances),
-    },
-    {
-      title: "SEEN",
-      tip: "How many times matching assets were observed by scans.",
-      value: numberFormatter.format(snapshot.totalRecords),
+      tip: "Unique public IPs currently identified as exposed OpenClaw instances.",
+      value: numberFormatter.format(snapshot.totalIps),
     },
     {
       title: "COUNTRIES",
-      tip: "Number of countries with observed exposure.",
+      tip: "Number of countries with exposed public IPs.",
       value: numberFormatter.format(snapshot.countries.length),
     },
     {

@@ -1,6 +1,6 @@
 -- ClawRadar / Netlas 网关表结构（Neon Postgres）
 -- 目标：节约请求、去重收敛、无效数据拦截、可追溯
--- 更新时间：2026-03-11
+-- 更新时间：2026-03-14
 
 create extension if not exists pgcrypto;
 drop table if exists netlas_quota_drift_events;
@@ -44,8 +44,6 @@ create table if not exists netlas_sync_jobs (
   planned_targets integer not null default 0,
   processed_targets integer not null default 0,
   pages_fetched integer not null default 0,
-  total_hits integer not null default 0,
-  deduped_hits integer not null default 0,
   final_status text not null,
   summary jsonb,
   error_message text,
@@ -56,6 +54,8 @@ create table if not exists netlas_sync_jobs (
 
 create index if not exists idx_netlas_sync_jobs_started_at on netlas_sync_jobs (started_at desc);
 create index if not exists idx_netlas_sync_jobs_status on netlas_sync_jobs (final_status);
+alter table if exists netlas_sync_jobs drop column if exists total_hits;
+alter table if exists netlas_sync_jobs drop column if exists deduped_hits;
 
 -- 3) 请求级留痕
 create table if not exists netlas_requests (
@@ -88,7 +88,7 @@ create index if not exists idx_netlas_requests_started_at on netlas_requests (st
 create index if not exists idx_netlas_requests_key_status on netlas_requests (key_id, status);
 create index if not exists idx_netlas_requests_job on netlas_requests (sync_job_id);
 
--- 4) 命中明细（全局去重）
+-- 4) 资产明细（全局去重）
 create table if not exists netlas_hits (
   id uuid primary key default gen_random_uuid(),
   sync_job_id uuid references netlas_sync_jobs(id) on delete set null,
@@ -113,7 +113,6 @@ create table if not exists netlas_hits (
   observed_at timestamptz,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
-  seen_count integer not null default 1,
   raw_hit jsonb not null,
   created_at timestamptz not null default now()
 );
@@ -123,7 +122,7 @@ alter table if exists netlas_hits add column if not exists hit_hash text;
 alter table if exists netlas_hits add column if not exists asset_key text;
 alter table if exists netlas_hits add column if not exists first_seen_at timestamptz not null default now();
 alter table if exists netlas_hits add column if not exists last_seen_at timestamptz not null default now();
-alter table if exists netlas_hits add column if not exists seen_count integer not null default 1;
+alter table if exists netlas_hits drop column if exists seen_count;
 
 create index if not exists idx_netlas_hits_ip on netlas_hits (ip);
 create index if not exists idx_netlas_hits_port on netlas_hits (port);

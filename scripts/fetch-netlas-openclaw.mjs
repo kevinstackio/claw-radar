@@ -280,7 +280,7 @@ async function fetchPageWithKeyPool({ apiKeys, activeKeyIndex, ...rest }) {
   throw lastError ?? new Error("All Netlas API keys failed.");
 }
 
-async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, includeRawPages, collectionStats, stopReason }) {
+async function writeBackup({ query, baseUrl, items, pagesFetched, rawPages, includeRawPages, collectionStats, stopReason }) {
   const now = new Date();
   const iso = now.toISOString();
   const day = iso.slice(0, 10);
@@ -297,16 +297,16 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
       generatedAt: iso,
       query,
       pagesFetched,
-      hitCount: hits.length,
+      itemCount: items.length,
       stopReason,
       collectionStats,
     },
     pages: rawPages.map((page, index) => ({
       page: index + 1,
-      hitCount: extractItems(page).length,
+      itemCount: extractItems(page).length,
       nextPageToken: "",
     })),
-    hits,
+    items,
   };
 
   if (includeRawPages) {
@@ -322,7 +322,7 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
       {
         generatedAt: iso,
         latestBackup: path.relative(process.cwd(), backupFile).split(path.sep).join("/"),
-        hitCount: hits.length,
+        itemCount: items.length,
         pagesFetched,
         stopReason,
       },
@@ -332,7 +332,7 @@ async function writeBackup({ query, baseUrl, hits, pagesFetched, rawPages, inclu
     "utf-8"
   );
 
-  return { backupFile, latestFile, hitCount: hits.length, stopReason };
+  return { backupFile, latestFile, itemCount: items.length, stopReason };
 }
 
 async function main() {
@@ -364,7 +364,7 @@ async function main() {
   }
 
   const rawPages = [];
-  const hits = [];
+  const collectedItems = [];
   const seenFingerprints = new Set();
   const pageStats = [];
 
@@ -391,8 +391,8 @@ async function main() {
     activeKeyIndex = keyIndex;
     rawPages.push(payload);
 
-    const items = extractItems(payload);
-    if (items.length === 0) {
+    const pageItems = extractItems(payload);
+    if (pageItems.length === 0) {
       stopReason = "empty_page";
       break;
     }
@@ -400,37 +400,37 @@ async function main() {
     const stat = {
       page: page + 1,
       start,
-      rawItems: items.length,
-      newHits: 0,
-      duplicateHits: 0,
-      invalidHits: 0,
+      rawItems: pageItems.length,
+      newItems: 0,
+      duplicateItems: 0,
+      invalidItems: 0,
       keyIndex: keyIndex + 1,
     };
 
-    for (const item of items) {
+    for (const item of pageItems) {
       const mapped = mapNetlasItem(item);
       const validation = validateMappedHit(mapped);
 
       if (!validation.valid) {
-        stat.invalidHits += 1;
+        stat.invalidItems += 1;
         continue;
       }
 
       const fingerprint = toFingerprint(mapped);
       if (seenFingerprints.has(fingerprint)) {
-        stat.duplicateHits += 1;
+        stat.duplicateItems += 1;
         continue;
       }
 
       seenFingerprints.add(fingerprint);
-      stat.newHits += 1;
-      hits.push(mapNetlasItemToHit(mapped, query));
+      stat.newItems += 1;
+      collectedItems.push(mapNetlasItemToHit(mapped, query));
     }
 
     pageStats.push(stat);
 
-    const duplicateRatio = stat.rawItems > 0 ? stat.duplicateHits / stat.rawItems : 0;
-    const lowNew = stat.newHits < minNewPerPage || duplicateRatio >= duplicateRatioStop;
+    const duplicateRatio = stat.rawItems > 0 ? stat.duplicateItems / stat.rawItems : 0;
+    const lowNew = stat.newItems < minNewPerPage || duplicateRatio >= duplicateRatioStop;
 
     if (lowNew) {
       consecutiveLowNewPages += 1;
@@ -438,8 +438,8 @@ async function main() {
       consecutiveLowNewPages = 0;
     }
 
-    if (stat.newHits === 0) {
-      stopReason = "zero_new_hits";
+    if (stat.newItems === 0) {
+      stopReason = "zero_new_items";
       break;
     }
 
@@ -449,13 +449,13 @@ async function main() {
     }
 
     if (observedPageSize === null) {
-      observedPageSize = items.length;
+      observedPageSize = pageItems.length;
     }
 
     const expectedPageSize = observedPageSize ?? startStep;
-    nextStart += items.length;
+    nextStart += pageItems.length;
 
-    if (items.length < expectedPageSize) {
+    if (pageItems.length < expectedPageSize) {
       stopReason = "last_page_short";
       break;
     }
@@ -463,16 +463,16 @@ async function main() {
 
   const collectionStats = {
     totalRawItems: pageStats.reduce((acc, s) => acc + s.rawItems, 0),
-    totalNewHits: pageStats.reduce((acc, s) => acc + s.newHits, 0),
-    totalDuplicateHits: pageStats.reduce((acc, s) => acc + s.duplicateHits, 0),
-    totalInvalidHits: pageStats.reduce((acc, s) => acc + s.invalidHits, 0),
+    totalNewItems: pageStats.reduce((acc, s) => acc + s.newItems, 0),
+    totalDuplicateItems: pageStats.reduce((acc, s) => acc + s.duplicateItems, 0),
+    totalInvalidItems: pageStats.reduce((acc, s) => acc + s.invalidItems, 0),
     pageStats,
   };
 
   const result = await writeBackup({
     query,
     baseUrl,
-    hits,
+    items: collectedItems,
     pagesFetched: rawPages.length,
     rawPages,
     includeRawPages,
@@ -482,7 +482,7 @@ async function main() {
 
   console.log(`Backup written: ${result.backupFile}`);
   console.log(`Latest pointer: ${result.latestFile}`);
-  console.log(`Fetched ${result.hitCount} deduped records across ${rawPages.length} page(s).`);
+  console.log(`Fetched ${result.itemCount} deduped records across ${rawPages.length} page(s).`);
   console.log(`Stop reason: ${result.stopReason}`);
   console.log(`Collection stats: ${JSON.stringify(collectionStats)}`);
 }
@@ -491,4 +491,3 @@ main().catch((error) => {
   console.error(error.message);
   process.exit(1);
 });
-
