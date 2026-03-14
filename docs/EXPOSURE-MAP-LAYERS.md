@@ -4,14 +4,18 @@
 
 - Record the current exposure map behavior.
 - Keep the popup field contract for every instance point.
-- Explicitly state that the map no longer aggregates by country, region, or city.
+- Explicitly state that world view and zoomed view use different presentation rules.
 
 ## Current Behavior
 
-- The map always renders every valid exposed instance point from the snapshot.
+- In world view (`zoom <= 3`), the map renders one active point per country.
+- Each country's active point rotates across that country's instance coordinates on an independent timer.
+- Single-point countries stay visible continuously and do not fade out.
+- Multi-point countries rotate through their points in fixed order so every point is shown.
+- Each country's switch is sequential: the current point fades out completely, then the next point fades in.
+- Country phases stay staggered so the world view does not hard-cut globally.
+- Once the user zooms in beyond world view, the map renders every valid exposed instance point from the snapshot.
 - One instance point corresponds to one unique public IP in `netlas_instances`.
-- There is no country anchor, region aggregate, city aggregate, or zoom-dependent bucket logic.
-- Zoom only changes how close the user is to the point cloud; it does not change the data model.
 - In world view (`zoom <= 3`), points are display-only and do not open popups.
 - Once the user zooms in beyond world view, each point can open its instance popup.
 
@@ -22,11 +26,15 @@
 - Point style: fill only, no stroke
 - Default fill color: `--map-marker-fill`
 - Selected fill color: `--map-marker-selected-fill`
-- Default fill opacity: `0.9`
-- Selected fill opacity: `0.96`
-- Every point also renders two animated ripple rings
-- Primary ripple offset / weight / opacity: `+2.1 / 1.2 / 0.58`
-- Secondary ripple offset / weight / opacity: `+4.1 / 1.0 / 0.40`
+- Default fill opacity: `0.76`
+- Selected fill opacity: `0.88`
+- Every rendered point also renders two animated ripple rings
+- World-view points also use a slower marker breathe animation
+- World-view country rotation cycle: `3.6s` to `6.4s` per country
+- World-view crossfade window: `0.76s` to `1.04s` per country
+- Primary ripple offset / weight / opacity: `+2.1 / 1.45 / 0.88`
+- Secondary ripple offset / weight / opacity: `+4.1 / 1.2 / 0.62`
+- Ripple colors come from `--map-marker-ripple` and `--map-marker-selected-ripple`
 
 ## Popup Contract
 
@@ -51,8 +59,10 @@
 ## Implementation
 
 - `components/exposure-map-client.tsx`
-  - renders every instance point
+  - switches between world-view country rotation and zoomed full-instance rendering
   - handles IP search focus and popup opening
+- `lib/world-view-country-rotation.mjs`
+  - picks one active point per country on independent rotation clocks
 - `lib/exposure-snapshot.ts`
   - provides the point list with coordinates and popup fields
 - `lib/exposure-types.ts`

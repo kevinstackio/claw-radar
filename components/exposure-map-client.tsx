@@ -9,6 +9,7 @@ import type { ExposureSnapshot } from "@/lib/exposure-types";
 import { IP_SEARCH_EVENT, type IpSearchResult } from "@/lib/ip-search";
 import { informationLayout } from "@/lib/ui-information";
 import { cn } from "@/lib/utils";
+import { selectWorldViewCountryPoints } from "@/lib/world-view-country-rotation.mjs";
 
 type ExposureMapClientProps = {
   snapshot: ExposureSnapshot;
@@ -19,6 +20,13 @@ type PlottedPoint = ExposureSnapshot["points"][number] & {
   lon: number;
 };
 
+type RenderedPoint = {
+  isWorldViewFocus: boolean;
+  point: PlottedPoint;
+  worldPhase: "incoming" | "outgoing" | "steady" | null;
+  worldVisibility: number;
+};
+
 const MAP_MAX_ZOOM = 12;
 const MAP_TILE_DETAIL_MAX_ZOOM = 10;
 const WORLD_VIEW_MAX_ZOOM = 3;
@@ -26,6 +34,7 @@ const MARKER_RADIUS = 2.8;
 const SELECTED_MARKER_RADIUS = 3.8;
 const RIPPLE_PRIMARY_OFFSET = 2.1;
 const RIPPLE_SECONDARY_OFFSET = 4.1;
+const WORLD_VIEW_ROTATION_TICK_MS = 220;
 
 function isValidCoordinate(lat: number, lon: number) {
   return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
@@ -117,6 +126,7 @@ function MapZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void
 export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
   const [searchResult, setSearchResult] = useState<IpSearchResult | null>(null);
   const [mapZoom, setMapZoom] = useState(2);
+  const [worldViewNowMs, setWorldViewNowMs] = useState(() => Date.now());
   const markerRefs = useRef<Record<string, LeafletCircleMarker>>({});
 
   useEffect(() => {
@@ -163,15 +173,44 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
 
   const matchedPointKey = matchedPoint ? `${matchedPoint.ip}-${matchedPoint.lat}-${matchedPoint.lon}` : null;
   const updatedAtLabel = formatSnapshotTime(snapshot.generatedAt);
-  const showPointPopups = mapZoom > WORLD_VIEW_MAX_ZOOM;
+  const isWorldView = mapZoom <= WORLD_VIEW_MAX_ZOOM;
+  const showPointPopups = !isWorldView;
+
+  useEffect(() => {
+    if (!isWorldView) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setWorldViewNowMs(Date.now());
+    }, WORLD_VIEW_ROTATION_TICK_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isWorldView]);
 
   const renderedPoints = useMemo(() => {
-    return [...plottedPoints].sort((left, right) => {
-      const leftSelected = left.ip === matchedPoint?.ip ? 1 : 0;
-      const rightSelected = right.ip === matchedPoint?.ip ? 1 : 0;
+    const basePoints: RenderedPoint[] = isWorldView
+      ? selectWorldViewCountryPoints(plottedPoints, worldViewNowMs).map(({ point, transition }) => ({
+          point,
+          isWorldViewFocus: true,
+          worldPhase: transition.phase as RenderedPoint["worldPhase"],
+          worldVisibility: transition.visibility,
+        }))
+      : plottedPoints.map((point) => ({
+          point,
+          isWorldViewFocus: false,
+          worldPhase: null,
+          worldVisibility: 1,
+        }));
+
+    return [...basePoints].sort((left, right) => {
+      const leftSelected = left.point.ip === matchedPoint?.ip ? 1 : 0;
+      const rightSelected = right.point.ip === matchedPoint?.ip ? 1 : 0;
       return leftSelected - rightSelected;
     });
-  }, [matchedPoint?.ip, plottedPoints]);
+  }, [isWorldView, matchedPoint?.ip, plottedPoints, worldViewNowMs]);
 
   useEffect(() => {
     if (!matchedPointKey || !showPointPopups) {
@@ -226,22 +265,32 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
         <MapZoomTracker onZoomChange={setMapZoom} />
         <MapSelectionController target={matchedPoint} />
 
-        {renderedPoints.map((point) => {
-          const markerKey = `${point.ip}-${point.lat}-${point.lon}`;
+        {renderedPoints.map(({ point, isWorldViewFocus, worldPhase, worldVisibility }) => {
+          const baseMarkerKey = `${point.ip}-${point.lat}-${point.lon}`;
           const isSelected = matchedPoint?.ip === point.ip;
           const radius = isSelected ? SELECTED_MARKER_RADIUS : MARKER_RADIUS;
+          const rippleColor = isSelected
+            ? "var(--map-marker-selected-ripple)"
+            : "var(--map-marker-ripple)";
+          const visibility = isWorldViewFocus ? worldVisibility : 1;
+          const markerFillOpacity = (isSelected ? 0.88 : 0.76) * visibility;
+          const primaryRippleOpacity = 0.88 * visibility;
+          const secondaryRippleOpacity = 0.62 * visibility;
 
           return (
-            <Fragment key={markerKey}>
+            <Fragment key={baseMarkerKey}>
               <CircleMarker
                 center={[point.lat, point.lon]}
                 radius={radius + RIPPLE_PRIMARY_OFFSET}
                 interactive={false}
                 pathOptions={{
-                  className: "exposure-map-ripple exposure-map-ripple--primary",
-                  color: "var(--map-marker-stroke)",
-                  weight: 1.2,
-                  opacity: 0.58,
+                  className: cn(
+                    "exposure-map-ripple exposure-map-ripple--primary",
+                    isWorldViewFocus && "exposure-map-ripple--world"
+                  ),
+                  color: rippleColor,
+                  weight: 1.45,
+                  opacity: primaryRippleOpacity,
                   fillOpacity: 0,
                 }}
               />
@@ -250,29 +299,38 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
                 radius={radius + RIPPLE_SECONDARY_OFFSET}
                 interactive={false}
                 pathOptions={{
-                  className: "exposure-map-ripple exposure-map-ripple--secondary",
-                  color: "var(--map-marker-stroke)",
-                  weight: 1,
-                  opacity: 0.4,
+                  className: cn(
+                    "exposure-map-ripple exposure-map-ripple--secondary",
+                    isWorldViewFocus && "exposure-map-ripple--world"
+                  ),
+                  color: rippleColor,
+                  weight: 1.2,
+                  opacity: secondaryRippleOpacity,
                   fillOpacity: 0,
                 }}
               />
               <CircleMarker
                 ref={(marker) => {
                   if (marker) {
-                    markerRefs.current[markerKey] = marker;
+                    markerRefs.current[baseMarkerKey] = marker;
                     return;
                   }
 
-                  delete markerRefs.current[markerKey];
+                  delete markerRefs.current[baseMarkerKey];
                 }}
                 center={[point.lat, point.lon]}
                 radius={radius}
                 pathOptions={{
-                  className: cn("exposure-map-marker", isSelected && "is-selected"),
+                  className: cn(
+                    "exposure-map-marker",
+                    isSelected && "is-selected",
+                    isWorldViewFocus && "exposure-map-marker--world",
+                    worldPhase === "incoming" && "exposure-map-marker--incoming",
+                    worldPhase === "outgoing" && "exposure-map-marker--outgoing"
+                  ),
                   stroke: false,
                   fillColor: isSelected ? "var(--map-marker-selected-fill)" : "var(--map-marker-fill)",
-                  fillOpacity: isSelected ? 0.96 : 0.9,
+                  fillOpacity: markerFillOpacity,
                 }}
               >
                 {showPointPopups ? (
