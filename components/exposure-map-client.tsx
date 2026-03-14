@@ -1,14 +1,16 @@
 "use client";
 
 import { divIcon } from "leaflet";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 
 import type { ExposureSnapshot } from "@/lib/exposure-types";
+import { selectRotatingRegionPoints } from "@/lib/map-region-rotation.mjs";
 
 const MAP_MAX_ZOOM = 12;
 const MAP_TILE_DETAIL_MAX_ZOOM = 10;
 const LOBSTER_ICON_SIZE = 9;
+const MAP_ROTATION_TICK_MS = 140;
 
 type ExposureMapClientProps = {
   snapshot: ExposureSnapshot;
@@ -32,48 +34,20 @@ function isValidCoordinate(lat: number, lon: number) {
   return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 }
 
-function selectCountryRepresentativePoints(points: PlottedPoint[]) {
-  const countryGroups = new Map<string, PlottedPoint[]>();
-
-  for (const point of points) {
-    // Group by the raw upstream country/region code exactly as stored.
-    // Do not fold region codes like HK into CN.
-    const countryKey = point.country || "Unknown";
-    const existing = countryGroups.get(countryKey);
-    if (existing) {
-      existing.push(point);
-      continue;
-    }
-    countryGroups.set(countryKey, [point]);
-  }
-
-  return [...countryGroups.entries()]
-    .sort(([leftCountry], [rightCountry]) => leftCountry.localeCompare(rightCountry))
-    .map(([, countryPoints]) => {
-      const coordinateCounts = new Map<string, number>();
-
-      for (const point of countryPoints) {
-        const coordinateKey = `${point.lat},${point.lon}`;
-        coordinateCounts.set(coordinateKey, (coordinateCounts.get(coordinateKey) ?? 0) + 1);
-      }
-
-      return [...countryPoints].sort((left, right) => {
-        const leftCoordinateKey = `${left.lat},${left.lon}`;
-        const rightCoordinateKey = `${right.lat},${right.lon}`;
-        const leftCoordinateCount = coordinateCounts.get(leftCoordinateKey) ?? 0;
-        const rightCoordinateCount = coordinateCounts.get(rightCoordinateKey) ?? 0;
-
-        if (leftCoordinateCount !== rightCoordinateCount) {
-          return rightCoordinateCount - leftCoordinateCount;
-        }
-
-        return left.ip.localeCompare(right.ip);
-      })[0];
-    });
-}
-
 export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
-  const plottedPoints = useMemo(
+  const [rotationNowMs, setRotationNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setRotationNowMs(Date.now());
+    }, MAP_ROTATION_TICK_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const rotatingPoints = useMemo(
     () => {
       const allPoints = snapshot.points
         .map((point) => {
@@ -91,9 +65,9 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
         })
         .filter((point): point is PlottedPoint => point !== null);
 
-      return selectCountryRepresentativePoints(allPoints);
+      return selectRotatingRegionPoints(allPoints, rotationNowMs);
     },
-    [snapshot.points]
+    [rotationNowMs, snapshot.points]
   );
 
   return (
@@ -114,11 +88,12 @@ export function ExposureMapClient({ snapshot }: ExposureMapClientProps) {
           maxZoom={MAP_MAX_ZOOM}
           maxNativeZoom={MAP_TILE_DETAIL_MAX_ZOOM}
         />
-        {plottedPoints.map((point) => (
+        {rotatingPoints.map(({ point, transition }) => (
           <Marker
             key={`${point.ip}-${point.lat}-${point.lon}`}
             position={[point.lat, point.lon]}
             icon={LOBSTER_ICON}
+            opacity={transition.visibility}
             interactive={false}
             keyboard={false}
           />

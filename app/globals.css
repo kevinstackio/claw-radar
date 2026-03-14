@@ -136,6 +136,8 @@ body {
 .leaflet-marker-icon.exposure-map-lobster-icon {
   background: transparent;
   border: 0;
+  transition: opacity 140ms linear;
+  will-change: opacity;
 }
 
 .leaflet-marker-icon.exposure-map-lobster-icon .exposure-map-lobster-glyph {
