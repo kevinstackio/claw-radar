@@ -6,6 +6,7 @@ import {
   computeUsageDelta,
   createRunDeduper,
   planRequestsForRun,
+  resolveNextStartOffset,
 } from "../lib/server/netlas-sync-core.mjs";
 
 test("computeUsageDelta counts any provider HTTP response as consumed request", () => {
@@ -65,4 +66,40 @@ test("createRunDeduper filters cross-page duplicates in same run", () => {
   assert.equal(deduper.addIfNew("hash-a"), false);
   assert.equal(deduper.addIfNew("hash-b"), true);
   assert.equal(deduper.size(), 2);
+});
+
+test("resolveNextStartOffset advances cursor after successful paged runs", () => {
+  assert.equal(
+    resolveNextStartOffset({
+      currentStartOffset: 60,
+      nextStartOffset: 120,
+      successfulRequests: 3,
+      stopReason: "max_requests_planned",
+    }),
+    120
+  );
+});
+
+test("resolveNextStartOffset wraps to zero when run reaches the last page", () => {
+  assert.equal(
+    resolveNextStartOffset({
+      currentStartOffset: 60,
+      nextStartOffset: 80,
+      successfulRequests: 1,
+      stopReason: "last_page_short",
+    }),
+    0
+  );
+});
+
+test("resolveNextStartOffset keeps the current cursor when no page succeeded", () => {
+  assert.equal(
+    resolveNextStartOffset({
+      currentStartOffset: 60,
+      nextStartOffset: 80,
+      successfulRequests: 0,
+      stopReason: "no_available_key",
+    }),
+    60
+  );
 });

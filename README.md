@@ -95,6 +95,7 @@ git config core.hooksPath .githooks
 ## 数据流说明
 
 1. `scripts/validate-netlas-neon.mjs` 从 Netlas API 拉取数据并写入 Neon。
+   定时同步会持久化 `start_offset` 游标，避免每次都重复从第一页开始扫。
 2. `lib/exposure-snapshot.ts` 在服务端读取 `netlas_instances` 聚合结果，按唯一公网 IP 实例完成清洗、国家聚合与地图点位转换。
 3. 首页 `app/page.tsx` 将快照传入仪表盘组件，地图和图表共享同一份快照数据。
 4. IP 搜索通过 `POST /api/exposure/search-ip` 在当前快照中匹配，前端收到结果后触发地图定位与高亮。

@@ -7,18 +7,23 @@ import { Client } from "pg";
 import {
   getDictionaryNumber,
   seedRuntimeDictionary,
+  upsertDictionaryValue,
 } from "../lib/server/dictionary-store.mjs";
 import {
   computeRemainingHourlyRuns,
   computeUsageDelta,
   createRunDeduper,
   planRequestsForRun,
+  resolveNextStartOffset,
 } from "../lib/server/netlas-sync-core.mjs";
 import { mergeInstanceObservations } from "../lib/server/netlas-instance-sync.mjs";
 
 const DEFAULT_BASE_URL = "https://app.netlas.io";
 const DEFAULT_OPENCLAW_QUERY = "(http.title:\"OpenClaw Control\") OR (http.body:\"openclaw-app\") OR (http.body:\"__OPENCLAW_CONTROL_UI_BASE_PATH__\")";
 const SEARCH_PATH = "/api/responses/";
+const DICT_INITIAL_START_OFFSET = "netlas.validation.initial_start_offset";
+const DICT_NEXT_START_OFFSET = "netlas.validation.next_start_offset";
+const SCHEDULED_SYNC_LOCK_KEY = 42024001;
 
 function asInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -663,6 +668,46 @@ async function loadTodayUsageByKey(client, keyIds) {
   return usage;
 }
 
+async function resolveScheduledStartOffset(client, { configuredStartOffset, maxPages, startStep }) {
+  const initialFallback = Math.max(configuredStartOffset, maxPages * startStep);
+  const initialStartOffset = Math.max(
+    0,
+    asInt(await getDictionaryNumber(client, DICT_INITIAL_START_OFFSET, initialFallback), initialFallback)
+  );
+
+  return Math.max(0, asInt(await getDictionaryNumber(client, DICT_NEXT_START_OFFSET, initialStartOffset), initialStartOffset));
+}
+
+async function persistScheduledStartOffset(client, nextStartOffset, updatedBy) {
+  await upsertDictionaryValue(client, {
+    path: DICT_NEXT_START_OFFSET,
+    valueType: "number",
+    value: Math.max(0, asInt(nextStartOffset, 0)),
+    description: "Next Netlas response start offset for scheduled instance sync.",
+    updatedBy,
+  });
+}
+
+async function tryAcquireScheduledSyncLock(client) {
+  const result = await client.query(
+    `
+      select pg_try_advisory_lock($1) as locked
+    `,
+    [SCHEDULED_SYNC_LOCK_KEY]
+  );
+
+  return result.rows[0]?.locked === true;
+}
+
+async function releaseScheduledSyncLock(client) {
+  await client.query(
+    `
+      select pg_advisory_unlock($1)
+    `,
+    [SCHEDULED_SYNC_LOCK_KEY]
+  );
+}
+
 export async function migrateNetlasInstanceSchema() {
   const databaseUrl = String(process.env.DATABASE_URL ?? "").trim();
   if (!databaseUrl) throw new Error("Missing required env: DATABASE_URL");
@@ -688,11 +733,12 @@ export async function runNetlasValidation(options = {}) {
   const baseUrl = (String(process.env.NETLAS_BASE_URL ?? DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const query = String(process.env.NETLAS_QUERY ?? "").trim() || DEFAULT_OPENCLAW_QUERY;
   const timeoutMs = asInt(options.timeoutMs ?? process.env.NETLAS_TIMEOUT_MS, 30000);
-  const start = asInt(process.env.NETLAS_VALIDATION_START, 0);
+  const configuredStartOffset = asInt(process.env.NETLAS_VALIDATION_START, 0);
   const startStep = asInt(process.env.NETLAS_VALIDATION_START_STEP ?? process.env.NETLAS_START_STEP, 20);
   const maxPages = asInt(options.maxPages ?? process.env.NETLAS_VALIDATION_MAX_PAGES ?? process.env.NETLAS_MAX_PAGES, 10);
   const dailyRequestBudgetPerKey = asInt(process.env.NETLAS_DAILY_REQUEST_BUDGET_PER_KEY, 50);
   const requestedMaxKeys = parseOptionalInt(options.maxKeys ?? process.env.NETLAS_VALIDATION_MAX_KEYS);
+  const requestedStartOffset = parseOptionalInt(options.startOffset);
   const runType = String(options.runType ?? "manual").trim() || "manual";
 
   if (!databaseUrl) throw new Error("Missing required env: DATABASE_URL");
@@ -710,6 +756,7 @@ export async function runNetlasValidation(options = {}) {
     connectionString: databaseUrl,
     ssl: /sslmode=require/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
   });
+  let scheduledLockAcquired = false;
 
   await client.connect();
 
@@ -717,6 +764,20 @@ export async function runNetlasValidation(options = {}) {
     await bootstrapSchema(client);
     await migrateLegacyHitsTable(client);
     await seedRuntimeDictionary(client);
+
+    if (runType === "scheduled") {
+      scheduledLockAcquired = await tryAcquireScheduledSyncLock(client);
+      if (!scheduledLockAcquired) {
+        return {
+          syncJobId: null,
+          jobId: null,
+          runType,
+          skipped: true,
+          skipReason: "scheduled_sync_already_running",
+          message: "Another scheduled sync is already running. This run was skipped to protect the shared cursor.",
+        };
+      }
+    }
 
     const encryptionSecret = String(process.env.NETLAS_ENCRYPTION_KEY ?? "").trim();
     if (!encryptionSecret) {
@@ -732,6 +793,15 @@ export async function runNetlasValidation(options = {}) {
     const maxKeysLimit = Math.max(defaultMaxKeys, asInt(await getDictionaryNumber(client, "netlas.validation.max_keys_limit", 20), 20));
     const desiredMaxKeys = requestedMaxKeys ?? (runType === "scheduled" ? allKeys.length : defaultMaxKeys);
     const resolvedMaxKeys = Math.min(Math.max(desiredMaxKeys, 1), maxKeysLimit, allKeys.length);
+    const startOffset =
+      requestedStartOffset ??
+      (runType === "scheduled"
+        ? await resolveScheduledStartOffset(client, {
+            configuredStartOffset,
+            maxPages,
+            startStep,
+          })
+        : configuredStartOffset);
 
     const keys = allKeys.slice(0, resolvedMaxKeys);
     const queryHash = sha256(query);
@@ -799,7 +869,7 @@ export async function runNetlasValidation(options = {}) {
     let okCount = 0;
     let failedCount = 0;
     let stopReason = plannedRequestsThisRun === 0 ? "no_budget_remaining" : "max_requests_planned";
-    let nextStartOffset = start;
+    let nextStartOffset = startOffset;
     let observedPageSize = null;
 
     let roundRobinCursor = 0;
@@ -1005,6 +1075,15 @@ export async function runNetlasValidation(options = {}) {
     }));
 
     const finalStatus = okCount > 0 || plannedRequestsThisRun === 0 ? "ok" : "failed";
+    const resolvedNextStartOffset =
+      runType === "scheduled"
+        ? resolveNextStartOffset({
+            currentStartOffset: startOffset,
+            nextStartOffset,
+            successfulRequests: okCount,
+            stopReason,
+          })
+        : nextStartOffset;
     const summary = {
       ok_count: okCount,
       failed_count: failedCount,
@@ -1014,6 +1093,8 @@ export async function runNetlasValidation(options = {}) {
       total_remaining_budget: totalRemainingBudget,
       per_key_daily_budget: dailyRequestBudgetPerKey,
       observed_page_size: observedPageSize,
+      start_offset_used: startOffset,
+      next_start_offset: resolvedNextStartOffset,
       inserted: totalInserted,
       updated: totalUpdated,
       invalid_filtered: totalInvalid,
@@ -1021,6 +1102,10 @@ export async function runNetlasValidation(options = {}) {
       stop_reason: stopReason,
       key_results: perKeyResults,
     };
+
+    if (runType === "scheduled") {
+      await persistScheduledStartOffset(client, resolvedNextStartOffset, jobId);
+    }
 
     await client.query(
       `
@@ -1041,6 +1126,7 @@ export async function runNetlasValidation(options = {}) {
     console.log(`Job key: ${jobId}`);
     console.log(`Keys in pool: ${keys.length}`);
     console.log(`Planned requests this run: ${plannedRequestsThisRun}`);
+    console.log(`Start offset used: ${startOffset}, Next start offset: ${resolvedNextStartOffset}`);
     console.log(`Pages fetched: ${totalPagesFetched}`);
     console.log(`Inserted: ${totalInserted}, Updated(existing): ${totalUpdated}`);
     console.log(`Invalid filtered: ${totalInvalid}, Duplicate-in-run filtered: ${totalDuplicateInRun}`);
@@ -1055,6 +1141,8 @@ export async function runNetlasValidation(options = {}) {
       maxKeysResolved: resolvedMaxKeys,
       keysInPool: keys.length,
       plannedRequestsThisRun,
+      startOffsetUsed: startOffset,
+      nextStartOffset: resolvedNextStartOffset,
       pagesFetched: totalPagesFetched,
       inserted: totalInserted,
       updated: totalUpdated,
@@ -1065,6 +1153,9 @@ export async function runNetlasValidation(options = {}) {
       perKeyResults,
     };
   } finally {
+    if (scheduledLockAcquired) {
+      await releaseScheduledSyncLock(client).catch(() => {});
+    }
     await client.end();
   }
 }

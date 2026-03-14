@@ -67,6 +67,8 @@ Workflow file:
 
 - `.github/workflows/netlas-sync-schedule.yml`
 - Calls `/api/cron/netlas-sync` on production URL every top-of-hour (UTC)
+- Scheduled sync persists the next Netlas `start_offset` in `app_dictionary`, so each run continues from the previous scan window instead of restarting at `0`.
+- Scheduled sync also uses a database advisory lock, so overlapping cron runs cannot corrupt the shared cursor.
 
 Required Vercel **Environment Variables**:
 
